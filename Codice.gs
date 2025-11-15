@@ -54,12 +54,9 @@ function funzionePrincipale() {
     var gestore = new GestoreDocumento(idTemplate, idCartella);
     
     // Esegui i metodi in sequenza
-    gestore.crea(nomeNuovoFile);
-    gestore.sostituisciPlaceholder(datiMerge[i]);
-    gestore.inserisciTabella(null); // Chiama il metodo vuoto
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
-      .sostituisciPlaceholder(datiMerge)
+      .sostituisciPlaceholder(datiMerge[i])
       .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ])
       .finalizza(); // Salva e chiude
 
