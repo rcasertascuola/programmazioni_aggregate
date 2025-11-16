@@ -54,13 +54,10 @@ function funzionePrincipale() {
     var gestore = new GestoreDocumento(idTemplate, idCartella);
     
     // Esegui i metodi in sequenza
-    gestore.crea(nomeNuovoFile);
-    gestore.sostituisciPlaceholder(datiMerge[i]);
-    gestore.inserisciTabella(null); // Chiama il metodo vuoto
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
-      .sostituisciPlaceholder(datiMerge)
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ])
+      .sostituisciPlaceholder(datiMerge[i])
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], {'tipo': 'indirizzo'})
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -151,19 +148,35 @@ class GestoreDocumento {
   }
 
   /**
-   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola.
+   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola, con un filtro opzionale.
    * @param {string} tagTabella - La stringa (es. '{{TABELLA_DATI}}') da cercare nella *prima riga* della tabella.
    * @param {Object[]} datiTabella - L'array di oggetti da inserire.
-   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono
-   * quali colonne estrarre dagli oggetti e in quale ordine.
+   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono quali colonne estrarre.
+   * @param {Object} [filtro=null] - Un oggetto opzionale per filtrare i dati (es. {'colonna': 'valore'}).
    */
-  inserisciTabella(tagTabella, datiTabella, colonneDaInserire) {
+  inserisciTabella(tagTabella, datiTabella, colonneDaInserire, filtro = null) {
     if (!this.body) {
       throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
     }
-    if (!datiTabella || datiTabella.length === 0) {
-      Logger.log("Nessun dato fornito per la tabella, salto inserimento.");
-      return this; // Non è un errore, salta l'operazione.
+
+    // Applica il filtro se fornito
+    var datiFiltrati = datiTabella;
+    if (filtro) {
+      datiFiltrati = datiTabella.filter(function(riga) {
+        // Controlla se la riga matcha tutte le condizioni del filtro (logica AND)
+        for (var chiave in filtro) {
+          if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
+            return false; // Se anche una sola condizione non matcha, la riga viene scartata
+          }
+        }
+        return true; // Se tutte le condizioni matchano, la riga viene inclusa
+      });
+      Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
+    }
+
+    if (!datiFiltrati || datiFiltrati.length === 0) {
+      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio (o dati iniziali vuoti).");
+      return this; // Salta l'operazione se non ci sono dati
     }
 
     try {
@@ -190,8 +203,6 @@ class GestoreDocumento {
         throw new Error("Tabella con tag '" + tagTabella + "' non trovata nella prima riga.");
       }
 
-      // Pulisce il tag dalla prima riga
-      firstRow.replaceText(tagTabella, '');
       Logger.log("Tabella trovata.");
 
       // 2. Copia il formato dell'ultima riga (template)
@@ -206,46 +217,29 @@ class GestoreDocumento {
         throw new Error("Il numero di colonne nel template (" + numCellsTemplate + ") non corrisponde al numero di 'colonneDaInserire' (" + colonneDaInserire.length + ").");
       }
       
-      var templateAttributes = [];
-      var templateTextAttributes = [];
-      for (var j = 0; j < numCellsTemplate; j++) {
-        var cell = templateRow.getCell(j);
-        // Salva gli attributi della *cella* (sfondo, padding, ecc.)
-        templateAttributes.push(cell.getAttributes());
-        // Salva gli attributi del *testo* (grassetto, font, ecc.)
-        // Nota: prende lo stile del primo elemento di testo, se esiste
-        if (cell.getChild(0) && cell.getChild(0).getType() === DocumentApp.ElementType.TEXT) {
-          templateTextAttributes.push(cell.getChild(0).asParagraph().getChild(0).asWordArt().getAttributes());
-        } else {
-          templateTextAttributes.push(null); // Nessuno stile testo specifico
-        }
-      }
-      Logger.log("Formato riga template copiato.");
+      Logger.log("Formato riga template individuato.");
+
+      // Salva una copia "pulita" del template prima di iniziare il ciclo
+      var masterTemplateRow = templateRow.copy();
       
-      // 3. Cancella la riga template
+      // 3. Cancella la riga template originale dalla tabella
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati
-      datiTabella.forEach(function(dataObject) {
-        var newRow = targetTable.appendTableRow();
+      // 4. Inserisce i nuovi dati, usando una copia fresca del master template per ogni riga
+      datiFiltrati.forEach(function(dataObject) {
+        // Crea una nuova riga clonando il master template. Questo garantisce che ogni riga sia "pulita".
+        var newRow = targetTable.appendTableRow(masterTemplateRow.copy());
         
+        // Popola la nuova riga con i dati
         colonneDaInserire.forEach(function(chiave, index) {
-          var valore = String(dataObject[chiave] || ''); // Converte in stringa, gestisce null/undefined
-          var newCell = newRow.appendTableCell(valore);
-          
-          // Applica gli attributi della cella (sfondo, ecc.)
-          if (templateAttributes[index]) {
-            newCell.setAttributes(templateAttributes[index]);
-          }
-          // Applica gli attributi del testo (grassetto, ecc.)
-          if (templateTextAttributes[index]) {
-            newCell.getChild(0).asParagraph().setAttributes(templateTextAttributes[index]);
-          }
+          var valore = String(dataObject[chiave] || '');
+          // Usa replaceText per sostituire i placeholder, preservando la formattazione.
+          newRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
         });
       });
       
-      Logger.log("Inserite " + datiTabella.length + " righe di dati nella tabella.");
+      Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
       return this; // Permette il chaining
 
     } catch (e) {
