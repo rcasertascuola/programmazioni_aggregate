@@ -40,7 +40,7 @@ function funzionePrincipale() {
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
-    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe']+ " " + datiMerge[i]['corso']+ " " + datiMerge[i]['alias_disciplina'];
+    const nomeNuovoFile = datiMerge[i]['alias_disciplina'];
     if (!nomeNuovoFile) {
       throw new Error("Manca 'alias_disciplina' in 'programmazioni'.");
     }
@@ -163,87 +163,80 @@ class GestoreDocumento {
     var datiFiltrati = datiTabella;
     if (filtro) {
       datiFiltrati = datiTabella.filter(function(riga) {
-        // Controlla se la riga matcha tutte le condizioni del filtro (logica AND)
         for (var chiave in filtro) {
           if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
-            return false; // Se anche una sola condizione non matcha, la riga viene scartata
+            return false;
           }
         }
-        return true; // Se tutte le condizioni matchano, la riga viene inclusa
+        return true;
       });
       Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
     }
 
     if (!datiFiltrati || datiFiltrati.length === 0) {
-      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio (o dati iniziali vuoti).");
-      return this; // Salta l'operazione se non ci sono dati
+      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio.");
+      return this;
     }
 
     try {
       Logger.log("Ricerca tabella con tag: " + tagTabella);
-      
-      // 1. Cerca la tabella
       var targetTable = null;
-      var firstRow = null;
       var tables = this.body.getTables();
-      
       for (var i = 0; i < tables.length; i++) {
         var table = tables[i];
-        if (table.getNumRows() > 0) {
-          var row = table.getRow(0);
-          if (row.getText().includes(tagTabella)) {
-            targetTable = table;
-            firstRow = row;
-            break;
-          }
+        if (table.getNumRows() > 0 && table.getRow(0).getText().includes(tagTabella)) {
+          targetTable = table;
+          break;
         }
       }
 
       if (targetTable === null) {
-        throw new Error("Tabella con tag '" + tagTabella + "' non trovata nella prima riga.");
+        throw new Error("Tabella con tag '" + tagTabella + "' non trovata.");
       }
-
       Logger.log("Tabella trovata.");
 
-      // 2. Copia il formato dell'ultima riga (template)
       if (targetTable.getNumRows() < 2) {
         throw new Error("La tabella deve avere almeno 2 righe (intestazione/tag e riga template).");
       }
       var templateRow = targetTable.getRow(targetTable.getNumRows() - 1);
-      var numCellsTemplate = templateRow.getNumCells();
-      
-      // Valida la coerenza delle colonne
-      if (numCellsTemplate !== colonneDaInserire.length) {
-        throw new Error("Il numero di colonne nel template (" + numCellsTemplate + ") non corrisponde al numero di 'colonneDaInserire' (" + colonneDaInserire.length + ").");
-      }
-      
-      Logger.log("Formato riga template individuato.");
 
-      // Salva una copia "pulita" del template prima di iniziare il ciclo
-      var masterTemplateRow = templateRow.copy();
-      
-      // 3. Cancella la riga template originale dalla tabella
+      // Salva gli stili dalla riga template
+      var templateStyles = [];
+      for (var i = 0; i < templateRow.getNumCells(); i++) {
+        var cell = templateRow.getCell(i);
+        var style = {};
+        // Copia tutti gli attributi del testo (bold, italic, font, colore, etc.)
+        if (cell.getText() !== "") {
+            var textElement = cell.getChild(0).asParagraph().getChild(0).asText();
+            style = textElement.getAttributes();
+        }
+        templateStyles.push(style);
+      }
+      Logger.log("Stili del template salvati.");
+
+      // Rimuovi la riga template
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati, usando una copia fresca del master template per ogni riga
+      // Inserisce i nuovi dati
       datiFiltrati.forEach(function(dataObject) {
-        // Crea una nuova riga clonando il master template. Questo garantisce che ogni riga sia "pulita".
-        var newRow = targetTable.appendTableRow(masterTemplateRow.copy());
-        
-        // Popola la nuova riga con i dati
+        var newRow = targetTable.appendTableRow();
         colonneDaInserire.forEach(function(chiave, index) {
           var valore = String(dataObject[chiave] || '');
-          // Usa replaceText per sostituire i placeholder, preservando la formattazione.
-          newRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
+          var newCell = newRow.appendTableCell(valore);
+
+          // Applica lo stile salvato
+          if (templateStyles[index]) {
+            newCell.getChild(0).asParagraph().getChild(0).asText().setAttributes(templateStyles[index]);
+          }
         });
       });
       
       Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
-      return this; // Permette il chaining
+      return this;
 
     } catch (e) {
-      Logger.log("ERRORE in inserisciTabella(): " + e.message);
+      Logger.log("ERRORE in inserisciTabella(): " + e.message + " Stack: " + e.stack);
       throw e;
     }
   }
@@ -275,6 +268,15 @@ class GestoreDocumento {
     }
   }
 }
+
+
+
+
+
+
+
+
+
 
 /**
  * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
@@ -363,4 +365,30 @@ function analizzaEstraiDati(sheetName) {
   // CASO 3: Formato non riconosciuto
   Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
   return []; // "vuoto se non si può"
+}
+
+
+// --- ESEMPIO DI UTILIZZO ---
+
+function testAnalisi() {
+  // Supponendo tu abbia una scheda "templates" formattata così:
+  // | chiave                | valore                |
+  // | cartella_destinazione | 12345ABC              |
+  // | id_template           | 67890XYZ              |
+  var config = analizzaEstraiDati("templates");
+  Logger.log("--- Risultato 'templates' (Oggetto) ---");
+  Logger.log(config);
+  // Output atteso: { cartella_destinazione: "12345ABC", id_template: "67890XYZ" }
+  // Puoi accedere a: config['cartella_destinazione']
+
+
+  // Supponendo tu abbia una scheda "utenti" formattata così:
+  // | id    | nome  | email               |
+  // | 1     | Mario | mario@example.com   |
+  // | 2     | Laura | laura@example.com   |
+  var utenti = analizzaEstraiDati("programmazioni");
+  Logger.log("--- Risultato 'utenti' (Array) ---");
+  Logger.log(utenti);
+  // Output atteso: [ {id: 1, nome: "Mario", ...}, {id: 2, nome: "Laura", ...} ]
+  // Puoi accedere a: utenti[0].nome
 }
