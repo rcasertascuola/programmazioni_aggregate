@@ -56,7 +56,7 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ])
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], {'tipo': 'indirizzo'})
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -147,19 +147,35 @@ class GestoreDocumento {
   }
 
   /**
-   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola.
+   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola, con un filtro opzionale.
    * @param {string} tagTabella - La stringa (es. '{{TABELLA_DATI}}') da cercare nella *prima riga* della tabella.
    * @param {Object[]} datiTabella - L'array di oggetti da inserire.
-   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono
-   * quali colonne estrarre dagli oggetti e in quale ordine.
+   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono quali colonne estrarre.
+   * @param {Object} [filtro=null] - Un oggetto opzionale per filtrare i dati (es. {'colonna': 'valore'}).
    */
-  inserisciTabella(tagTabella, datiTabella, colonneDaInserire) {
+  inserisciTabella(tagTabella, datiTabella, colonneDaInserire, filtro = null) {
     if (!this.body) {
       throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
     }
-    if (!datiTabella || datiTabella.length === 0) {
-      Logger.log("Nessun dato fornito per la tabella, salto inserimento.");
-      return this; // Non è un errore, salta l'operazione.
+
+    // Applica il filtro se fornito
+    var datiFiltrati = datiTabella;
+    if (filtro) {
+      datiFiltrati = datiTabella.filter(function(riga) {
+        // Controlla se la riga matcha tutte le condizioni del filtro (logica AND)
+        for (var chiave in filtro) {
+          if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
+            return false; // Se anche una sola condizione non matcha, la riga viene scartata
+          }
+        }
+        return true; // Se tutte le condizioni matchano, la riga viene inclusa
+      });
+      Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
+    }
+
+    if (!datiFiltrati || datiFiltrati.length === 0) {
+      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio (o dati iniziali vuoti).");
+      return this; // Salta l'operazione se non ci sono dati
     }
 
     try {
@@ -207,7 +223,7 @@ class GestoreDocumento {
       Logger.log("Riga template cancellata.");
 
       // 4. Inserisce i nuovi dati, clonando la riga template per mantenere la formattazione
-      datiTabella.forEach(function(dataObject) {
+      datiFiltrati.forEach(function(dataObject) {
         // Clona la riga template e la aggiunge alla tabella. Questo preserva tutta la formattazione delle celle (inclusi i bordi).
         var newRow = targetTable.appendTableRow(templateRow.copy());
         
@@ -219,7 +235,7 @@ class GestoreDocumento {
         });
       });
       
-      Logger.log("Inserite " + datiTabella.length + " righe di dati nella tabella.");
+      Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
       return this; // Permette il chaining
 
     } catch (e) {
