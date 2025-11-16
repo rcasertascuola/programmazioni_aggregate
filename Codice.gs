@@ -21,7 +21,9 @@ function onOpen() {
 function funzionePrincipale() {
   try {
     // 1. CARICA CONFIGURAZIONE
-    var config = analizzaEstraiDati("templates");
+    var dataManager = new DataManager();
+    var config = dataManager.getSheetData("templates");
+
     if (!config || typeof config !== 'object' || Array.isArray(config)) {
       throw new Error("Formato dati 'templates' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
@@ -31,14 +33,14 @@ function funzionePrincipale() {
       throw new Error("Configurazione 'templates' incompleta.");
     }
   
-    var parametri_elenchi = analizzaEstraiDati("parametri_elenchi");
+    var parametri_elenchi = dataManager.getSheetData("parametri_elenchi");
     if (!config || typeof parametri_elenchi !== 'object' || Array.isArray(config)) {
       throw new Error("Formato dati 'parametri_elenchi' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
     var i = 0
     
     // 2. CARICA DATI PER MERGE
-    var datiMerge = analizzaEstraiDati("programmazioni");
+    var datiMerge = dataManager.getSheetData("programmazioni");
     
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
@@ -61,11 +63,11 @@ function funzionePrincipale() {
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
       .sostituisciPlaceholder(parametri_elenchi)
-      .inserisciTabella('eqf', analizzaEstraiDati("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
-      .inserisciTabella('PERMANENTE', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('CITTADINANZA', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('DISCIPLINARI', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })  
+      .inserisciTabella('eqf', dataManager.getSheetData("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
+      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -229,47 +231,15 @@ class GestoreDocumento {
       
       var templateRow = targetTable.getRow(targetTable.getNumRows() - 1);
       
-      // Salva stili delle celle e del testo
-      var templateCellStyles = [];
-      for (var i = 0; i < templateRow.getNumCells(); i++) {
-        var cell = templateRow.getCell(i);
-        var text = cell.getText();
-        var textStyle = {};
-        if (text) {
-            // Assicura che ci sia un elemento di testo prima di accedere agli attributi
-            var textElement = cell.getChild(0).asParagraph().getChild(0);
-            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
-                textStyle = textElement.asText().getAttributes();
-            }
-        }
-        templateCellStyles.push({
-          cellAttributes: cell.getAttributes(),
-          textAttributes: textStyle
-        });
-      }
-      Logger.log("Stili del template (celle e testo) salvati.");
-
-      targetTable.removeRow(targetTable.getNumRows() - 1);
-      Logger.log("Riga template cancellata.");
-
-      // Inserisce i nuovi dati
       datiFiltrati.forEach(function(dataObject) {
-        var newRow = targetTable.appendTableRow();
+        var newRow = targetTable.appendTableRow(templateRow.copy());
         colonneDaInserire.forEach(function(chiave, index) {
-          var valore = String(dataObject[chiave] || '');
-          var newCell = newRow.appendTableCell();
-          
-          // Applica stili cella e inserisce testo
-          var styles = templateCellStyles[index];
-          newCell.setAttributes(styles.cellAttributes);
-          var paragraph = newCell.insertParagraph(0, valore);
-
-          // Applica stili testo
-          if (Object.keys(styles.textAttributes).length > 0) {
-            paragraph.getChild(0).asText().setAttributes(styles.textAttributes);
-          }
+            var valore = String(dataObject[chiave] || '');
+            newRow.getCell(index).setText(valore);
         });
       });
+
+      targetTable.removeRow(targetTable.getNumRows() - datiFiltrati.length -1);
       
       Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
       return this;
@@ -308,91 +278,105 @@ class GestoreDocumento {
   }
 }
 
-/**
- * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
- * basato sulla presenza di intestazioni 'chiave'/'valore' o 'id'.
- *
- * @param {string} sheetName Il nome della scheda da cui leggere i dati.
- * @returns {Object | Array} 
- * - Un Oggetto {k:v} se le colonne 'chiave' e 'valore' sono presenti.
- * - Un Array di Oggetti [{}, {}] se la colonna 'id' è presente.
- * - Un Array vuoto [] in tutti gli altri casi o in caso di errore.
- */
-function analizzaEstraiDati(sheetName) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(sheetName);
-
-  // --- Gestione Errori Iniziale ---
-  if (sheet == null) {
-    Logger.log("Errore: Scheda '" + sheetName + "' non trovata.");
-    return []; // Restituisce array vuoto
-  }
-  
-  var allData;
-  try {
-    allData = sheet.getDataRange().getValues();
-  } catch (e) {
-    Logger.log("Impossibile leggere i dati dal foglio '" + sheetName + "'. Probabilmente è vuoto.");
-    return []; // Restituisce array vuoto
+class DataManager {
+  constructor() {
+    this.cache = {};
+    this.ss = SpreadsheetApp.getActiveSpreadsheet();
   }
 
-  // Se il foglio è vuoto (0 righe) o ha solo intestazioni (1 riga)
-  if (allData.length < 2) {
-    Logger.log("Nessuna riga di dati trovata in '" + sheetName + "'.");
-    // Determiniamo cosa restituire in base alle sole intestazioni (se presenti)
-    if (allData.length === 1) {
-      var onlyHeaders = allData[0].map(h => h.toString().trim().toLowerCase());
-      var hasChiave = onlyHeaders.includes('chiave');
-      var hasValore = onlyHeaders.includes('valore');
-      var hasId = onlyHeaders.includes('id');
-      
-      if (hasChiave && hasValore) return {}; // Restituisce oggetto vuoto
-      if (hasId) return []; // Restituisce array vuoto
+  /**
+   * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
+   * basato sulla presenza di intestazioni 'chiave'/'valore' o 'id'.
+   *
+   * @param {string} sheetName Il nome della scheda da cui leggere i dati.
+   * @returns {Object | Array}
+   * - Un Oggetto {k:v} se le colonne 'chiave' e 'valore' sono presenti.
+   * - Un Array di Oggetti [{}, {}] se la colonna 'id' è presente.
+   * - Un Array vuoto [] in tutti gli altri casi o in caso di errore.
+   */
+  getSheetData(sheetName) {
+    if (this.cache[sheetName]) {
+      return this.cache[sheetName];
     }
-    return []; // Default: array vuoto
-  }
 
-  // --- Elaborazione Dati ---
-  
-  // Estrae le intestazioni e le "pulisce"
-  var headers = allData.shift().map(h => h.toString().trim().toLowerCase());
-  
-  var hasChiave = headers.includes('chiave');
-  var hasValore = headers.includes('valore');
-  var hasId = headers.includes('id');
-  
-  // --- LOGICA DI FORMATTAZIONE ---
+    var sheet = this.ss.getSheetByName(sheetName);
 
-  // CASO 1: Formato Chiave/Valore
-  if (hasChiave && hasValore) {
-    Logger.log("Rilevato formato 'chiave/valore' in '" + sheetName + "'.");
-    var chiaveIndex = headers.indexOf('chiave');
-    var valoreIndex = headers.indexOf('valore');
-    var resultObject = {};
+    // --- Gestione Errori Iniziale ---
+    if (sheet == null) {
+      Logger.log("Errore: Scheda '" + sheetName + "' non trovata.");
+      return []; // Restituisce array vuoto
+    }
     
-    allData.forEach(function(row) {
-      var key = row[chiaveIndex];
-      if (key && key.toString().trim() !== "") { // Assicura che la chiave esista
-        resultObject[key] = row[valoreIndex];
+    var allData;
+    try {
+      allData = sheet.getDataRange().getValues();
+    } catch (e) {
+      Logger.log("Impossibile leggere i dati dal foglio '" + sheetName + "'. Probabilmente è vuoto.");
+      return []; // Restituisce array vuoto
+    }
+
+    // Se il foglio è vuoto (0 righe) o ha solo intestazioni (1 riga)
+    if (allData.length < 2) {
+      Logger.log("Nessuna riga di dati trovata in '" + sheetName + "'.");
+      // Determiniamo cosa restituire in base alle sole intestazioni (se presenti)
+      if (allData.length === 1) {
+        var onlyHeaders = allData[0].map(h => h.toString().trim().toLowerCase());
+        var hasChiave = onlyHeaders.includes('chiave');
+        var hasValore = onlyHeaders.includes('valore');
+        var hasId = onlyHeaders.includes('id');
+
+        if (hasChiave && hasValore) return {}; // Restituisce oggetto vuoto
+        if (hasId) return []; // Restituisce array vuoto
       }
-    });
-    return resultObject;
-  }
-  
-  // CASO 2: Formato Tabella con ID (Array di Oggetti)
-  if (hasId) {
-    Logger.log("Rilevato formato tabella con 'id' in '" + sheetName + "'.");
-    var resultArray = allData.map(function(row) {
-      var rowObject = {};
-      headers.forEach(function(header, index) {
-        rowObject[header] = row[index];
+      return []; // Default: array vuoto
+    }
+
+    // --- Elaborazione Dati ---
+
+    // Estrae le intestazioni e le "pulisce"
+    var headers = allData.shift().map(h => h.toString().trim().toLowerCase());
+
+    var hasChiave = headers.includes('chiave');
+    var hasValore = headers.includes('valore');
+    var hasId = headers.includes('id');
+
+    // --- LOGICA DI FORMATTAZIONE ---
+
+    let result;
+    // CASO 1: Formato Chiave/Valore
+    if (hasChiave && hasValore) {
+      Logger.log("Rilevato formato 'chiave/valore' in '" + sheetName + "'.");
+      var chiaveIndex = headers.indexOf('chiave');
+      var valoreIndex = headers.indexOf('valore');
+      var resultObject = {};
+
+      allData.forEach(function(row) {
+        var key = row[chiaveIndex];
+        if (key && key.toString().trim() !== "") { // Assicura che la chiave esista
+          resultObject[key] = row[valoreIndex];
+        }
       });
-      return rowObject;
-    });
-    return resultArray;
+      result = resultObject;
+    }
+    // CASO 2: Formato Tabella con ID (Array di Oggetti)
+    else if (hasId) {
+      Logger.log("Rilevato formato tabella con 'id' in '" + sheetName + "'.");
+      var resultArray = allData.map(function(row) {
+        var rowObject = {};
+        headers.forEach(function(header, index) {
+          rowObject[header] = row[index];
+        });
+        return rowObject;
+      });
+      result = resultArray;
+    }
+    // CASO 3: Formato non riconosciuto
+    else {
+      Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
+      result = []; // "vuoto se non si può"
+    }
+
+    this.cache[sheetName] = result;
+    return result;
   }
-  
-  // CASO 3: Formato non riconosciuto
-  Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
-  return []; // "vuoto se non si può"
 }
