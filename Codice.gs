@@ -218,30 +218,24 @@ class GestoreDocumento {
       }
       
       Logger.log("Formato riga template individuato.");
+
+      // Salva una copia "pulita" del template prima di iniziare il ciclo
+      var masterTemplateRow = templateRow.copy();
       
-      // 3. Cancella la riga template
+      // 3. Cancella la riga template originale dalla tabella
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati, lavorando sulla riga template per evitare bug di clonazione
+      // 4. Inserisce i nuovi dati, usando una copia fresca del master template per ogni riga
       datiFiltrati.forEach(function(dataObject) {
-        // Per ogni riga di dati, modifica temporaneamente la riga template in memoria,
-        // la copia nel documento, e poi la ripristina.
-        // Questo evita un bug in cui la formattazione viene persa o la riga non viene aggiornata.
-
-        // A. Modifica il template con i dati correnti
+        // Crea una nuova riga clonando il master template. Questo garantisce che ogni riga sia "pulita".
+        var newRow = targetTable.appendTableRow(masterTemplateRow.copy());
+        
+        // Popola la nuova riga con i dati
         colonneDaInserire.forEach(function(chiave, index) {
           var valore = String(dataObject[chiave] || '');
-          templateRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
-        });
-
-        // B. Aggiunge una copia della riga template (ora modificata) alla tabella
-        targetTable.appendTableRow(templateRow.copy());
-
-        // C. Ripristina il template allo stato originale con i placeholder
-        colonneDaInserire.forEach(function(chiave, index) {
-          var valore = String(dataObject[chiave] || '');
-          templateRow.getCell(index).replaceText(valore, '{{' + chiave + '}}');
+          // Usa replaceText per sostituire i placeholder, preservando la formattazione.
+          newRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
         });
       });
       
