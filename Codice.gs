@@ -214,8 +214,8 @@ class GestoreDocumento {
         colonneDaInserire.forEach(function(chiave, index) {
           var valore = String(dataObject[chiave] || ''); // Converte in stringa, gestisce null/undefined
           
-          // Imposta il testo per ogni cella nella nuova riga.
-          newRow.getCell(index).setText(valore);
+          // Usa replaceText per sostituire i placeholder nella cella clonata, preservando la formattazione.
+          newRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
         });
       });
       
