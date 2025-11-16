@@ -30,13 +30,16 @@ function funzionePrincipale() {
     if (!idCartella || !idTemplate) {
       throw new Error("Configurazione 'templates' incompleta.");
     }
-    
+  
+    var parametri_elenchi = analizzaEstraiDati("parametri_elenchi");
+    if (!config || typeof parametri_elenchi !== 'object' || Array.isArray(config)) {
+      throw new Error("Formato dati 'parametri_elenchi' non valido. Mi aspetto un oggetto Chiave/Valore.");
+    }
     var i = 0
     
     // 2. CARICA DATI PER MERGE
     var datiMerge = analizzaEstraiDati("programmazioni");
-    Logger.log(datiMerge[i]);
-
+    
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
@@ -45,7 +48,7 @@ function funzionePrincipale() {
       throw new Error("Dati insufficienti in 'programmazioni' per creare il nome del file. Sono richiesti 'anno_scolastico', 'classe', 'corso', e 'alias_disciplina'.");
     }
     delete datiMerge['alias']; // Rimuovilo così non cerca di sostituire {{nome_file}}
-    
+  
     
     // 3. USA IL GESTORE DOCUMENTO
     Logger.log("Avvio GestoreDocumento...");
@@ -57,7 +60,12 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .sostituisciPlaceholder(parametri_elenchi)
+      .inserisciTabella('eqf', analizzaEstraiDati("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
+      .inserisciTabella('PERMANENTE', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('CITTADINANZA', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('DISCIPLINARI', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })  
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
