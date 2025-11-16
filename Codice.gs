@@ -40,7 +40,7 @@ function funzionePrincipale() {
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
-    const nomeNuovoFile = datiMerge[i]['alias_disciplina'];
+    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe']+ " " + datiMerge[i]['corso']+ " " + datiMerge[i]['alias_disciplina'];
     if (!nomeNuovoFile) {
       throw new Error("Manca 'alias_disciplina' in 'programmazioni'.");
     }
@@ -282,15 +282,6 @@ class GestoreDocumento {
   }
 }
 
-
-
-
-
-
-
-
-
-
 /**
  * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
  * basato sulla presenza di intestazioni 'chiave'/'valore' o 'id'.
@@ -379,31 +370,3 @@ function analizzaEstraiDati(sheetName) {
   Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
   return []; // "vuoto se non si può"
 }
-
-
-// --- ESEMPIO DI UTILIZZO ---
-
-function testAnalisi() {
-  // Supponendo tu abbia una scheda "templates" formattata così:
-  // | chiave                | valore                |
-  // | cartella_destinazione | 12345ABC              |
-  // | id_template           | 67890XYZ              |
-  var config = analizzaEstraiDati("templates");
-  Logger.log("--- Risultato 'templates' (Oggetto) ---");
-  Logger.log(config); 
-  // Output atteso: { cartella_destinazione: "12345ABC", id_template: "67890XYZ" }
-  // Puoi accedere a: config['cartella_destinazione']
-
-
-  // Supponendo tu abbia una scheda "utenti" formattata così:
-  // | id    | nome  | email               |
-  // | 1     | Mario | mario@example.com   |
-  // | 2     | Laura | laura@example.com   |
-  var utenti = analizzaEstraiDati("programmazioni");
-  Logger.log("--- Risultato 'utenti' (Array) ---");
-  Logger.log(utenti);
-  // Output atteso: [ {id: 1, nome: "Mario", ...}, {id: 2, nome: "Laura", ...} ]
-  // Puoi accedere a: utenti[0].nome
-}
-
-
