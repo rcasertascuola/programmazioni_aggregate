@@ -40,9 +40,9 @@ function funzionePrincipale() {
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
-    const nomeNuovoFile = datiMerge[i]['alias_disciplina'];
-    if (!nomeNuovoFile) {
-      throw new Error("Manca 'alias_disciplina' in 'programmazioni'.");
+    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe'] + datiMerge[i]['corso'] + " " + datiMerge[i]['alias_disciplina'];
+    if (!datiMerge[i]['anno_scolastico'] || !datiMerge[i]['classe'] || !datiMerge[i]['corso'] || !datiMerge[i]['alias_disciplina']) {
+      throw new Error("Dati insufficienti in 'programmazioni' per creare il nome del file. Sono richiesti 'anno_scolastico', 'classe', 'corso', e 'alias_disciplina'.");
     }
     delete datiMerge['alias']; // Rimuovilo così non cerca di sostituire {{nome_file}}
     
@@ -57,7 +57,7 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], {'tipo': 'indirizzo'})
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -163,12 +163,25 @@ class GestoreDocumento {
     var datiFiltrati = datiTabella;
     if (filtro) {
       datiFiltrati = datiTabella.filter(function(riga) {
-        for (var chiave in filtro) {
-          if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
-            return false;
+        if (filtro['$or']) {
+          var orConditions = filtro['$or'];
+          for (var i = 0; i < orConditions.length; i++) {
+            var condition = orConditions[i];
+            for (var chiave in condition) {
+              if (riga.hasOwnProperty(chiave) && String(riga[chiave]) === String(condition[chiave])) {
+                return true;
+              }
+            }
           }
+          return false;
+        } else {
+          for (var chiave in filtro) {
+            if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
+              return false;
+            }
+          }
+          return true;
         }
-        return true;
       });
       Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
     }
@@ -179,42 +192,35 @@ class GestoreDocumento {
     }
 
     try {
-      Logger.log("Ricerca tabella con tag: " + tagTabella);
       var targetTable = null;
       var tables = this.body.getTables();
       for (var i = 0; i < tables.length; i++) {
-        var table = tables[i];
-        if (table.getNumRows() > 0 && table.getRow(0).getText().includes(tagTabella)) {
-          targetTable = table;
+        if (tables[i].getNumRows() > 0 && tables[i].getRow(0).getText().includes(tagTabella)) {
+          targetTable = tables[i];
           break;
         }
       }
 
-      if (targetTable === null) {
-        throw new Error("Tabella con tag '" + tagTabella + "' non trovata.");
-      }
+      if (!targetTable) throw new Error("Tabella con tag '" + tagTabella + "' non trovata.");
       Logger.log("Tabella trovata.");
 
-      if (targetTable.getNumRows() < 2) {
-        throw new Error("La tabella deve avere almeno 2 righe (intestazione/tag e riga template).");
-      }
+      if (targetTable.getNumRows() < 2) throw new Error("La tabella deve avere almeno 2 righe.");
+      
       var templateRow = targetTable.getRow(targetTable.getNumRows() - 1);
-
-      // Salva gli stili dalla riga template
-      var templateStyles = [];
+      
+      // Salva stili delle celle e del testo
+      var templateCellStyles = [];
       for (var i = 0; i < templateRow.getNumCells(); i++) {
         var cell = templateRow.getCell(i);
-        var style = {};
-        // Copia tutti gli attributi del testo (bold, italic, font, colore, etc.)
-        if (cell.getText() !== "") {
-            var textElement = cell.getChild(0).asParagraph().getChild(0).asText();
-            style = textElement.getAttributes();
-        }
-        templateStyles.push(style);
+        var text = cell.getText();
+        var textStyle = text ? cell.getChild(0).asParagraph().getChild(0).getAttributes() : {};
+        templateCellStyles.push({
+          cellAttributes: cell.getAttributes(),
+          textAttributes: textStyle
+        });
       }
-      Logger.log("Stili del template salvati.");
+      Logger.log("Stili del template (celle e testo) salvati.");
 
-      // Rimuovi la riga template
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
@@ -223,12 +229,15 @@ class GestoreDocumento {
         var newRow = targetTable.appendTableRow();
         colonneDaInserire.forEach(function(chiave, index) {
           var valore = String(dataObject[chiave] || '');
-          var newCell = newRow.appendTableCell(valore);
+          var newCell = newRow.appendTableCell();
+          
+          // Applica stili cella e inserisce testo
+          var styles = templateCellStyles[index];
+          newCell.setAttributes(styles.cellAttributes);
+          var paragraph = newCell.insertParagraph(0, valore);
 
-          // Applica lo stile salvato
-          if (templateStyles[index]) {
-            newCell.getChild(0).asParagraph().getChild(0).asText().setAttributes(templateStyles[index]);
-          }
+          // Applica stili testo
+          paragraph.getChild(0).setAttributes(styles.textAttributes);
         });
       });
       
