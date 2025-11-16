@@ -57,7 +57,7 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome'], {'tipo': 'indirizzo'})
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], {'tipo': 'indirizzo'})
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -223,16 +223,25 @@ class GestoreDocumento {
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati, clonando la riga template per mantenere la formattazione
+      // 4. Inserisce i nuovi dati, lavorando sulla riga template per evitare bug di clonazione
       datiFiltrati.forEach(function(dataObject) {
-        // Clona la riga template e la aggiunge alla tabella. Questo preserva tutta la formattazione delle celle (inclusi i bordi).
-        var newRow = targetTable.appendTableRow(templateRow.copy());
-        
+        // Per ogni riga di dati, modifica temporaneamente la riga template in memoria,
+        // la copia nel documento, e poi la ripristina.
+        // Questo evita un bug in cui la formattazione viene persa o la riga non viene aggiornata.
+
+        // A. Modifica il template con i dati correnti
         colonneDaInserire.forEach(function(chiave, index) {
-          var valore = String(dataObject[chiave] || ''); // Converte in stringa, gestisce null/undefined
-          
-          // Usa replaceText per sostituire i placeholder nella cella clonata, preservando la formattazione.
-          newRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
+          var valore = String(dataObject[chiave] || '');
+          templateRow.getCell(index).replaceText('{{' + chiave + '}}', valore);
+        });
+
+        // B. Aggiunge una copia della riga template (ora modificata) alla tabella
+        targetTable.appendTableRow(templateRow.copy());
+
+        // C. Ripristina il template allo stato originale con i placeholder
+        colonneDaInserire.forEach(function(chiave, index) {
+          var valore = String(dataObject[chiave] || '');
+          templateRow.getCell(index).replaceText(valore, '{{' + chiave + '}}');
         });
       });
       
