@@ -187,8 +187,6 @@ class GestoreDocumento {
         throw new Error("Tabella con tag '" + tagTabella + "' non trovata nella prima riga.");
       }
 
-      // Pulisce il tag dalla prima riga
-      firstRow.replaceText(tagTabella, '');
       Logger.log("Tabella trovata.");
 
       // 2. Copia il formato dell'ultima riga (template)
@@ -203,42 +201,22 @@ class GestoreDocumento {
         throw new Error("Il numero di colonne nel template (" + numCellsTemplate + ") non corrisponde al numero di 'colonneDaInserire' (" + colonneDaInserire.length + ").");
       }
       
-      var templateAttributes = [];
-      var templateTextAttributes = [];
-      for (var j = 0; j < numCellsTemplate; j++) {
-        var cell = templateRow.getCell(j);
-        // Salva gli attributi della *cella* (sfondo, padding, ecc.)
-        templateAttributes.push(cell.getAttributes());
-        // Salva gli attributi del *testo* (grassetto, font, ecc.)
-        // Nota: prende lo stile del primo elemento di testo, se esiste
-        if (cell.getChild(0) && cell.getChild(0).getType() === DocumentApp.ElementType.TEXT) {
-          templateTextAttributes.push(cell.getChild(0).asParagraph().getChild(0).asWordArt().getAttributes());
-        } else {
-          templateTextAttributes.push(null); // Nessuno stile testo specifico
-        }
-      }
-      Logger.log("Formato riga template copiato.");
+      Logger.log("Formato riga template individuato.");
       
       // 3. Cancella la riga template
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati
+      // 4. Inserisce i nuovi dati, clonando la riga template per mantenere la formattazione
       datiTabella.forEach(function(dataObject) {
-        var newRow = targetTable.appendTableRow();
+        // Clona la riga template e la aggiunge alla tabella. Questo preserva tutta la formattazione delle celle (inclusi i bordi).
+        var newRow = targetTable.appendTableRow(templateRow.copy());
         
         colonneDaInserire.forEach(function(chiave, index) {
           var valore = String(dataObject[chiave] || ''); // Converte in stringa, gestisce null/undefined
-          var newCell = newRow.appendTableCell(valore);
           
-          // Applica gli attributi della cella (sfondo, ecc.)
-          if (templateAttributes[index]) {
-            newCell.setAttributes(templateAttributes[index]);
-          }
-          // Applica gli attributi del testo (grassetto, ecc.)
-          if (templateTextAttributes[index]) {
-            newCell.getChild(0).asParagraph().setAttributes(templateTextAttributes[index]);
-          }
+          // Imposta il testo per ogni cella nella nuova riga.
+          newRow.getCell(index).setText(valore);
         });
       });
       
