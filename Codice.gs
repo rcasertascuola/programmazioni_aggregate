@@ -40,9 +40,9 @@ function funzionePrincipale() {
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
-    const nomeNuovoFile = datiMerge[i]['alias_disciplina'];
-    if (!nomeNuovoFile) {
-      throw new Error("Manca 'alias_disciplina' in 'programmazioni'.");
+    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe'] + datiMerge[i]['corso'] + " " + datiMerge[i]['alias_disciplina'];
+    if (!datiMerge[i]['anno_scolastico'] || !datiMerge[i]['classe'] || !datiMerge[i]['corso'] || !datiMerge[i]['alias_disciplina']) {
+      throw new Error("Dati insufficienti in 'programmazioni' per creare il nome del file. Sono richiesti 'anno_scolastico', 'classe', 'corso', e 'alias_disciplina'.");
     }
     delete datiMerge['alias']; // Rimuovilo così non cerca di sostituire {{nome_file}}
     
@@ -54,13 +54,10 @@ function funzionePrincipale() {
     var gestore = new GestoreDocumento(idTemplate, idCartella);
     
     // Esegui i metodi in sequenza
-    gestore.crea(nomeNuovoFile);
-    gestore.sostituisciPlaceholder(datiMerge[i]);
-    gestore.inserisciTabella(null); // Chiama il metodo vuoto
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
-      .sostituisciPlaceholder(datiMerge)
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ])
+      .sostituisciPlaceholder(datiMerge[i])
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -151,105 +148,126 @@ class GestoreDocumento {
   }
 
   /**
-   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola.
+   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola, con un filtro opzionale.
    * @param {string} tagTabella - La stringa (es. '{{TABELLA_DATI}}') da cercare nella *prima riga* della tabella.
    * @param {Object[]} datiTabella - L'array di oggetti da inserire.
-   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono
-   * quali colonne estrarre dagli oggetti e in quale ordine.
+   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono quali colonne estrarre.
+   * @param {Object} [filtro=null] - Un oggetto opzionale per filtrare i dati (es. {'colonna': 'valore'}).
    */
-  inserisciTabella(tagTabella, datiTabella, colonneDaInserire) {
+  inserisciTabella(tagTabella, datiTabella, colonneDaInserire, filtro = null) {
     if (!this.body) {
       throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
     }
-    if (!datiTabella || datiTabella.length === 0) {
-      Logger.log("Nessun dato fornito per la tabella, salto inserimento.");
-      return this; // Non è un errore, salta l'operazione.
+
+    // Applica il filtro se fornito
+    var datiFiltrati = datiTabella;
+    if (filtro) {
+      datiFiltrati = datiTabella.filter(function(riga) {
+        var andMatch = true;
+        var orMatch = false;
+
+        // Controlla prima le condizioni AND
+        for (var chiave in filtro) {
+          if (chiave !== '$or') {
+            if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
+              andMatch = false;
+              break;
+            }
+          }
+        }
+
+        if (!andMatch) return false; // Se la parte AND fallisce, la riga è esclusa
+
+        // Se ci sono condizioni OR, controllale
+        if (filtro['$or']) {
+          var orConditions = filtro['$or'];
+          for (var i = 0; i < orConditions.length; i++) {
+            var condition = orConditions[i];
+            for (var chiave in condition) {
+              if (riga.hasOwnProperty(chiave) && String(riga[chiave]) === String(condition[chiave])) {
+                orMatch = true;
+                break;
+              }
+            }
+            if (orMatch) break;
+          }
+          return orMatch; // Il risultato finale dipende dalla corrispondenza OR
+        }
+
+        return true; // Se c'erano solo condizioni AND e sono state superate
+      });
+      Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
+    }
+
+    if (!datiFiltrati || datiFiltrati.length === 0) {
+      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio.");
+      return this;
     }
 
     try {
-      Logger.log("Ricerca tabella con tag: " + tagTabella);
-      
-      // 1. Cerca la tabella
       var targetTable = null;
-      var firstRow = null;
       var tables = this.body.getTables();
-      
       for (var i = 0; i < tables.length; i++) {
-        var table = tables[i];
-        if (table.getNumRows() > 0) {
-          var row = table.getRow(0);
-          if (row.getText().includes(tagTabella)) {
-            targetTable = table;
-            firstRow = row;
-            break;
-          }
+        if (tables[i].getNumRows() > 0 && tables[i].getRow(0).getText().includes(tagTabella)) {
+          targetTable = tables[i];
+          break;
         }
       }
 
-      if (targetTable === null) {
-        throw new Error("Tabella con tag '" + tagTabella + "' non trovata nella prima riga.");
-      }
-
-      // Pulisce il tag dalla prima riga
-      firstRow.replaceText(tagTabella, '');
+      if (!targetTable) throw new Error("Tabella con tag '" + tagTabella + "' non trovata.");
       Logger.log("Tabella trovata.");
 
-      // 2. Copia il formato dell'ultima riga (template)
-      if (targetTable.getNumRows() < 2) {
-        throw new Error("La tabella deve avere almeno 2 righe (intestazione/tag e riga template).");
-      }
+      if (targetTable.getNumRows() < 2) throw new Error("La tabella deve avere almeno 2 righe.");
+      
       var templateRow = targetTable.getRow(targetTable.getNumRows() - 1);
-      var numCellsTemplate = templateRow.getNumCells();
       
-      // Valida la coerenza delle colonne
-      if (numCellsTemplate !== colonneDaInserire.length) {
-        throw new Error("Il numero di colonne nel template (" + numCellsTemplate + ") non corrisponde al numero di 'colonneDaInserire' (" + colonneDaInserire.length + ").");
-      }
-      
-      var templateAttributes = [];
-      var templateTextAttributes = [];
-      for (var j = 0; j < numCellsTemplate; j++) {
-        var cell = templateRow.getCell(j);
-        // Salva gli attributi della *cella* (sfondo, padding, ecc.)
-        templateAttributes.push(cell.getAttributes());
-        // Salva gli attributi del *testo* (grassetto, font, ecc.)
-        // Nota: prende lo stile del primo elemento di testo, se esiste
-        if (cell.getChild(0) && cell.getChild(0).getType() === DocumentApp.ElementType.TEXT) {
-          templateTextAttributes.push(cell.getChild(0).asParagraph().getChild(0).asWordArt().getAttributes());
-        } else {
-          templateTextAttributes.push(null); // Nessuno stile testo specifico
+      // Salva stili delle celle e del testo
+      var templateCellStyles = [];
+      for (var i = 0; i < templateRow.getNumCells(); i++) {
+        var cell = templateRow.getCell(i);
+        var text = cell.getText();
+        var textStyle = {};
+        if (text) {
+            // Assicura che ci sia un elemento di testo prima di accedere agli attributi
+            var textElement = cell.getChild(0).asParagraph().getChild(0);
+            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+                textStyle = textElement.asWordArt().getAttributes();
+            }
         }
+        templateCellStyles.push({
+          cellAttributes: cell.getAttributes(),
+          textAttributes: textStyle
+        });
       }
-      Logger.log("Formato riga template copiato.");
-      
-      // 3. Cancella la riga template
+      Logger.log("Stili del template (celle e testo) salvati.");
+
       targetTable.removeRow(targetTable.getNumRows() - 1);
       Logger.log("Riga template cancellata.");
 
-      // 4. Inserisce i nuovi dati
-      datiTabella.forEach(function(dataObject) {
+      // Inserisce i nuovi dati
+      datiFiltrati.forEach(function(dataObject) {
         var newRow = targetTable.appendTableRow();
-        
         colonneDaInserire.forEach(function(chiave, index) {
-          var valore = String(dataObject[chiave] || ''); // Converte in stringa, gestisce null/undefined
-          var newCell = newRow.appendTableCell(valore);
+          var valore = String(dataObject[chiave] || '');
+          var newCell = newRow.appendTableCell();
           
-          // Applica gli attributi della cella (sfondo, ecc.)
-          if (templateAttributes[index]) {
-            newCell.setAttributes(templateAttributes[index]);
-          }
-          // Applica gli attributi del testo (grassetto, ecc.)
-          if (templateTextAttributes[index]) {
-            newCell.getChild(0).asParagraph().setAttributes(templateTextAttributes[index]);
+          // Applica stili cella e inserisce testo
+          var styles = templateCellStyles[index];
+          newCell.setAttributes(styles.cellAttributes);
+          var paragraph = newCell.insertParagraph(0, valore);
+
+          // Applica stili testo
+          if (Object.keys(styles.textAttributes).length > 0) {
+            paragraph.getChild(0).asWordArt().setAttributes(styles.textAttributes);
           }
         });
       });
       
-      Logger.log("Inserite " + datiTabella.length + " righe di dati nella tabella.");
-      return this; // Permette il chaining
+      Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
+      return this;
 
     } catch (e) {
-      Logger.log("ERRORE in inserisciTabella(): " + e.message);
+      Logger.log("ERRORE in inserisciTabella(): " + e.message + " Stack: " + e.stack);
       throw e;
     }
   }
