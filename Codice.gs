@@ -57,7 +57,7 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -163,25 +163,38 @@ class GestoreDocumento {
     var datiFiltrati = datiTabella;
     if (filtro) {
       datiFiltrati = datiTabella.filter(function(riga) {
+        var andMatch = true;
+        var orMatch = false;
+
+        // Controlla prima le condizioni AND
+        for (var chiave in filtro) {
+          if (chiave !== '$or') {
+            if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
+              andMatch = false;
+              break;
+            }
+          }
+        }
+
+        if (!andMatch) return false; // Se la parte AND fallisce, la riga è esclusa
+
+        // Se ci sono condizioni OR, controllale
         if (filtro['$or']) {
           var orConditions = filtro['$or'];
           for (var i = 0; i < orConditions.length; i++) {
             var condition = orConditions[i];
             for (var chiave in condition) {
               if (riga.hasOwnProperty(chiave) && String(riga[chiave]) === String(condition[chiave])) {
-                return true;
+                orMatch = true;
+                break;
               }
             }
+            if (orMatch) break;
           }
-          return false;
-        } else {
-          for (var chiave in filtro) {
-            if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
-              return false;
-            }
-          }
-          return true;
+          return orMatch; // Il risultato finale dipende dalla corrispondenza OR
         }
+
+        return true; // Se c'erano solo condizioni AND e sono state superate
       });
       Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
     }
@@ -213,7 +226,14 @@ class GestoreDocumento {
       for (var i = 0; i < templateRow.getNumCells(); i++) {
         var cell = templateRow.getCell(i);
         var text = cell.getText();
-        var textStyle = text ? cell.getChild(0).asParagraph().getChild(0).getAttributes() : {};
+        var textStyle = {};
+        if (text) {
+            // Assicura che ci sia un elemento di testo prima di accedere agli attributi
+            var textElement = cell.getChild(0).asParagraph().getChild(0);
+            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+                textStyle = textElement.asWordArt().getAttributes();
+            }
+        }
         templateCellStyles.push({
           cellAttributes: cell.getAttributes(),
           textAttributes: textStyle
@@ -237,7 +257,9 @@ class GestoreDocumento {
           var paragraph = newCell.insertParagraph(0, valore);
 
           // Applica stili testo
-          paragraph.getChild(0).setAttributes(styles.textAttributes);
+          if (Object.keys(styles.textAttributes).length > 0) {
+            paragraph.getChild(0).asWordArt().setAttributes(styles.textAttributes);
+          }
         });
       });
       
@@ -277,15 +299,6 @@ class GestoreDocumento {
     }
   }
 }
-
-
-
-
-
-
-
-
-
 
 /**
  * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
@@ -374,30 +387,4 @@ function analizzaEstraiDati(sheetName) {
   // CASO 3: Formato non riconosciuto
   Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
   return []; // "vuoto se non si può"
-}
-
-
-// --- ESEMPIO DI UTILIZZO ---
-
-function testAnalisi() {
-  // Supponendo tu abbia una scheda "templates" formattata così:
-  // | chiave                | valore                |
-  // | cartella_destinazione | 12345ABC              |
-  // | id_template           | 67890XYZ              |
-  var config = analizzaEstraiDati("templates");
-  Logger.log("--- Risultato 'templates' (Oggetto) ---");
-  Logger.log(config);
-  // Output atteso: { cartella_destinazione: "12345ABC", id_template: "67890XYZ" }
-  // Puoi accedere a: config['cartella_destinazione']
-
-
-  // Supponendo tu abbia una scheda "utenti" formattata così:
-  // | id    | nome  | email               |
-  // | 1     | Mario | mario@example.com   |
-  // | 2     | Laura | laura@example.com   |
-  var utenti = analizzaEstraiDati("programmazioni");
-  Logger.log("--- Risultato 'utenti' (Array) ---");
-  Logger.log(utenti);
-  // Output atteso: [ {id: 1, nome: "Mario", ...}, {id: 2, nome: "Laura", ...} ]
-  // Puoi accedere a: utenti[0].nome
 }
