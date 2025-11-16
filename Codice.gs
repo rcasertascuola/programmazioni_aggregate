@@ -386,7 +386,7 @@ function testAnalisi() {
   // | id_template           | 67890XYZ              |
   var config = analizzaEstraiDati("templates");
   Logger.log("--- Risultato 'templates' (Oggetto) ---");
-  Logger.log(config); 
+  Logger.log(config);
   // Output atteso: { cartella_destinazione: "12345ABC", id_template: "67890XYZ" }
   // Puoi accedere a: config['cartella_destinazione']
 
@@ -401,5 +401,3 @@ function testAnalisi() {
   // Output atteso: [ {id: 1, nome: "Mario", ...}, {id: 2, nome: "Laura", ...} ]
   // Puoi accedere a: utenti[0].nome
 }
-
-
