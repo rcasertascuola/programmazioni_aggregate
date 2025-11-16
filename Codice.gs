@@ -35,11 +35,12 @@ function funzionePrincipale() {
     
     // 2. CARICA DATI PER MERGE
     var datiMerge = analizzaEstraiDati("programmazioni");
-   
+    Logger.log(datiMerge[i]);
+
     if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
       throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
     }
-    const nomeNuovoFile = datiMerge[i]['alias_disciplina'];
+    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe']+ " " + datiMerge[i]['corso']+ " " + datiMerge[i]['alias_disciplina'];
     if (!nomeNuovoFile) {
       throw new Error("Manca 'alias_disciplina' in 'programmazioni'.");
     }
@@ -56,7 +57,7 @@ function funzionePrincipale() {
     var nuovoDocumento = gestore
       .crea(nomeNuovoFile)
       .sostituisciPlaceholder(datiMerge[i])
-      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome', ], {'tipo': 'indirizzo'})
+      .inserisciTabella('COMPETENZE DI INDIRIZZO', analizzaEstraiDati("competenze"), ['codice', 'nome'], {'tipo': 'indirizzo'})
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -271,7 +272,6 @@ class GestoreDocumento {
     }
   }
 }
-
 
 /**
  * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
