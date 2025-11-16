@@ -231,7 +231,7 @@ class GestoreDocumento {
             // Assicura che ci sia un elemento di testo prima di accedere agli attributi
             var textElement = cell.getChild(0).asParagraph().getChild(0);
             if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
-                textStyle = textElement.asWordArt().getAttributes();
+                textStyle = textElement.asText().getAttributes();
             }
         }
         templateCellStyles.push({
@@ -258,7 +258,7 @@ class GestoreDocumento {
 
           // Applica stili testo
           if (Object.keys(styles.textAttributes).length > 0) {
-            paragraph.getChild(0).asWordArt().setAttributes(styles.textAttributes);
+            paragraph.getChild(0).asText().setAttributes(styles.textAttributes);
           }
         });
       });
