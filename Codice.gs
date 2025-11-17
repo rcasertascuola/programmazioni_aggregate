@@ -315,15 +315,15 @@ class GestoreDocumento {
         var newRowAbilita = nuovaTabellaAbilita.appendTableRow(templateRowAbilita.copy());
 
         var cellaAbilita = newRowAbilita.getCell(0);
-        cellaAbilita.clear();
+        cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
 
-        var p1 = cellaAbilita.appendParagraph('');
-        p1.appendText("abilità cognitive: ").setBold(true);
-        p1.appendText(modulo.abilità_specifiche_cognitive).setBold(false);
+        var primoParagrafo = cellaAbilita.getParagraphs()[0];
+        primoParagrafo.appendText("abilità cognitive: ").setBold(true);
+        primoParagrafo.appendText(modulo.abilità_specifiche_cognitive).setBold(false);
 
-        var p2 = cellaAbilita.appendParagraph('');
-        p2.appendText("abilità teoriche: ").setBold(true);
-        p2.appendText(modulo.abilità_specifiche_pratiche + ' (' + modulo.abilità + ')').setBold(false);
+        var secondoParagrafo = cellaAbilita.appendParagraph('');
+        secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
+        secondoParagrafo.appendText(modulo.abilità_specifiche_pratiche + ' (' + modulo.abilità + ')').setBold(false);
 
         var competenzeTesto = modulo.competenze_specifiche + ' (' + modulo.competenze + ')';
         newRowAbilita.getCell(1).setText(competenzeTesto);
