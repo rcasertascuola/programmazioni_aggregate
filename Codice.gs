@@ -84,8 +84,8 @@ function funzionePrincipale() {
       .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
       .inserisciTabella('NUCLEI', dataManager.getSheetData("nuclei_fondanti"), ['codice', 'descrizione'], { 'anno': datiMerge[i]['classe'] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})  
       .inserisciTabella('RISULTATI', dataManager.getSheetData("risultati_minimi"), ['codice', 'descrizione'])  
-      .inserisciTabella('CONOSCENZE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]}) 
-      .inserisciTabella('ABILITÀ', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})    
+      .inserisciTabella('CONOSCENZE ATTESE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]}) 
+      .inserisciTabella('ABILITÀ ATTESE', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})    
       .creaTabelleDeiModuli(moduliFiltrati, datiUd)
       .finalizza(); // Salva e chiude
 
@@ -256,7 +256,7 @@ class GestoreDocumento {
             var valore = String(dataObject[chiave] || '');
             var cella = newRow.getCell(index);
             var paragrafo = cella.getChild(0).asParagraph();
-
+    
             // Check if the paragraph has any children (text runs)
             if (paragrafo.getNumChildren() > 0) {
                 var textElement = paragrafo.getChild(0);
