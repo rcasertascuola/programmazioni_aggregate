@@ -244,7 +244,15 @@ class GestoreDocumento {
         var newRow = targetTable.appendTableRow(templateRow.copy());
         colonneDaInserire.forEach(function(chiave, index) {
             var valore = String(dataObject[chiave] || '');
-            newRow.getCell(index).setText(valore);
+            var cella = newRow.getCell(index);
+            var textElement = cella.getChild(0).asParagraph().getChild(0);
+            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+              var attributi = textElement.asText().getAttributes();
+              cella.setText(valore);
+              cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+            } else {
+              cella.setText(valore);
+            }
         });
       });
 
@@ -276,8 +284,13 @@ class GestoreDocumento {
       datiModuli.forEach(function(modulo) {
         // --- Crea e popola la tabella MODULO ---
         var nuovaTabellaModulo = infoTabelle.templates['MODULO'].copy();
-        nuovaTabellaModulo.getRow(0).getCell(0).setText('MODULO ' + modulo.ordine);
+        var cellaModulo = nuovaTabellaModulo.getRow(0).getCell(0);
+        var attributiModulo = cellaModulo.getChild(0).asParagraph().getChild(0).asText().getAttributes();
+        cellaModulo.setText('MODULO ' + modulo.ordine);
+        cellaModulo.getChild(0).asParagraph().getChild(0).setAttributes(attributiModulo);
+
         nuovaTabellaModulo.getRow(0).getCell(1).setText('UDA - ' + modulo.titolo_uda + ": " + modulo.titolo);
+        nuovaTabellaModulo.getRow(1).getCell(1).setText(modulo.tempi_modulo);
         this.body.insertTable(indiceInserimento++, nuovaTabellaModulo);
         this.body.insertParagraph(indiceInserimento++, "");
 
@@ -300,9 +313,19 @@ class GestoreDocumento {
         var nuovaTabellaAbilita = infoTabelle.templates['Abilità'].copy();
         var templateRowAbilita = nuovaTabellaAbilita.getRow(nuovaTabellaAbilita.getNumRows() - 1);
         var newRowAbilita = nuovaTabellaAbilita.appendTableRow(templateRowAbilita.copy());
-        var abilitaTesto = modulo.abilità_specifiche_cognitive + '\n' + modulo.abilità_specifiche_pratiche + ' (' + modulo.abilità + ')';
+
+        var cellaAbilita = newRowAbilita.getCell(0);
+        cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
+
+        var primoParagrafo = cellaAbilita.getParagraphs()[0];
+        primoParagrafo.appendText("abilità cognitive: ").setBold(true);
+        primoParagrafo.appendText(modulo.abilità_specifiche_cognitive).setBold(false);
+
+        var secondoParagrafo = cellaAbilita.appendParagraph('');
+        secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
+        secondoParagrafo.appendText(modulo.abilità_specifiche_pratiche + ' (' + modulo.abilità + ')').setBold(false);
+
         var competenzeTesto = modulo.competenze_specifiche + ' (' + modulo.competenze + ')';
-        newRowAbilita.getCell(0).setText(abilitaTesto);
         newRowAbilita.getCell(1).setText(competenzeTesto);
         nuovaTabellaAbilita.removeRow(nuovaTabellaAbilita.getNumRows() - 2);
         this.body.insertTable(indiceInserimento++, nuovaTabellaAbilita);
@@ -321,10 +344,12 @@ class GestoreDocumento {
     var templates = {};
     var posizione = -1;
     var tabelle = this.body.getTables();
+    var tagNormalizzati = tags.map(function(t) { return t.replace(/\s/g, '').toLowerCase(); });
 
-    tags.forEach(function(tag) {
+    tags.forEach(function(tag, index) {
       for (var i = 0; i < tabelle.length; i++) {
-        if (tabelle[i].getRow(0).getText().includes(tag)) {
+        var testoCella = tabelle[i].getRow(0).getCell(0).getText().replace(/\s/g, '').toLowerCase();
+        if (testoCella === tagNormalizzati[index]) {
           templates[tag] = tabelle[i].copy();
           var indiceTabella = this.body.getChildIndex(tabelle[i]);
           if (posizione === -1 || indiceTabella < posizione) {
