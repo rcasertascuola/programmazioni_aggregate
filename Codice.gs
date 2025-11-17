@@ -51,7 +51,15 @@ function funzionePrincipale() {
     }
     delete datiMerge['alias']; // Rimuovilo così non cerca di sostituire {{nome_file}}
   
-    
+    // Carica i dati per le nuove tabelle
+    var datiModuli = dataManager.getSheetData("moduli");
+    var datiUd = dataManager.getSheetData("ud");
+
+    // Ordina i moduli in base alla colonna 'ordine'
+    datiModuli.sort(function(a, b) {
+      return a.ordine - b.ordine;
+    });
+
     // 3. USA IL GESTORE DOCUMENTO
     Logger.log("Avvio GestoreDocumento...");
     
@@ -68,6 +76,7 @@ function funzionePrincipale() {
       .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .creaTabelleDeiModuli(datiModuli, datiUd)
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -235,7 +244,15 @@ class GestoreDocumento {
         var newRow = targetTable.appendTableRow(templateRow.copy());
         colonneDaInserire.forEach(function(chiave, index) {
             var valore = String(dataObject[chiave] || '');
-            newRow.getCell(index).setText(valore);
+            var cella = newRow.getCell(index);
+            var textElement = cella.getChild(0).asParagraph().getChild(0);
+            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+              var attributi = textElement.asText().getAttributes();
+              cella.setText(valore);
+              cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+            } else {
+              cella.setText(valore);
+            }
         });
       });
 
@@ -248,6 +265,130 @@ class GestoreDocumento {
       Logger.log("ERRORE in inserisciTabella(): " + e.message + " Stack: " + e.stack);
       throw e;
     }
+  }
+
+  /**
+   * Crea e popola le tabelle dei moduli, unità didattiche e abilità.
+   * @param {Object[]} datiModuli L'array di oggetti dei moduli.
+   * @param {Object[]} datiUd L'array di oggetti delle unità didattiche.
+   */
+  creaTabelleDeiModuli(datiModuli, datiUd) {
+    if (!this.body) {
+      throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
+    }
+
+    try {
+      var infoTabelle = this._trovaERimuoviTabelleTemplate(['MODULO', 'Unità Didattiche', 'Abilità']);
+      var indiceInserimento = infoTabelle.posizione;
+
+      datiModuli.forEach(function(modulo) {
+        // --- Crea e popola la tabella MODULO ---
+        var nuovaTabellaModulo = infoTabelle.templates['MODULO'].copy();
+        var cellaModulo = nuovaTabellaModulo.getRow(0).getCell(0);
+        var attributiModulo = cellaModulo.getChild(0).asParagraph().getChild(0).asText().getAttributes();
+        cellaModulo.setText('MODULO ' + modulo.ordine);
+        cellaModulo.getChild(0).asParagraph().getChild(0).setAttributes(attributiModulo);
+
+        nuovaTabellaModulo.getRow(0).getCell(1).setText('UDA - ' + modulo.titolo_uda + ": " + modulo.titolo);
+        nuovaTabellaModulo.getRow(1).getCell(1).setText(modulo.tempi_modulo);
+        this.body.insertTable(indiceInserimento++, nuovaTabellaModulo);
+        this.body.insertParagraph(indiceInserimento++, "");
+
+        // --- Crea e popola la tabella Unità Didattiche ---
+        var datiUdFiltrati = datiUd.filter(function(ud) { return ud.id_modulo === modulo.id; });
+        datiUdFiltrati.sort(function(a, b) { return a.ordinale - b.ordinale; });
+
+        var nuovaTabellaUd = infoTabelle.templates['Unità Didattiche'].copy();
+        var templateRowUd = nuovaTabellaUd.getRow(nuovaTabellaUd.getNumRows() - 1);
+        datiUdFiltrati.forEach(function(ud) {
+          var newRow = nuovaTabellaUd.appendTableRow(templateRowUd.copy());
+          newRow.getCell(0).setText(ud.titolo);
+          newRow.getCell(1).setText(ud.conoscenze);
+        });
+        nuovaTabellaUd.removeRow(nuovaTabellaUd.getNumRows() - datiUdFiltrati.length - 1);
+        this.body.insertTable(indiceInserimento++, nuovaTabellaUd);
+        this.body.insertParagraph(indiceInserimento++, "");
+
+        // --- Crea e popola la tabella Abilità ---
+        var nuovaTabellaAbilita = infoTabelle.templates['Abilità'].copy();
+        var templateRowAbilita = nuovaTabellaAbilita.getRow(nuovaTabellaAbilita.getNumRows() - 1);
+        var newRowAbilita = nuovaTabellaAbilita.appendTableRow(templateRowAbilita.copy());
+
+        var cellaAbilita = newRowAbilita.getCell(0);
+        cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
+
+        var primoParagrafo = cellaAbilita.getChild(0).asParagraph();
+        primoParagrafo.appendText("abilità cognitive: ").setBold(true);
+        if (modulo.abilità_specifiche_cognitive) {
+          primoParagrafo.appendText(String(modulo.abilità_specifiche_cognitive)).setBold(false);
+        }
+
+        var secondoParagrafo = cellaAbilita.appendParagraph('');
+        secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
+
+        var testoPratiche = '';
+        var pratiche = modulo.abilità_specifiche_pratiche || '';
+        var abilita = modulo.abilità || '';
+        if (pratiche && abilita) {
+          testoPratiche = pratiche + ' (' + abilita + ')';
+        } else if (pratiche) {
+          testoPratiche = pratiche;
+        } else if (abilita) {
+          testoPratiche = '(' + abilita + ')';
+        }
+        if (testoPratiche) {
+          secondoParagrafo.appendText(testoPratiche).setBold(false);
+        }
+
+        var testoCompetenze = '';
+        var specifiche = modulo.competenze_specifiche || '';
+        var competenze = modulo.competenze || '';
+        if (specifiche && competenze) {
+          testoCompetenze = specifiche + ' (' + competenze + ')';
+        } else if (specifiche) {
+          testoCompetenze = specifiche;
+        } else if (competenze) {
+          testoCompetenze = '(' + competenze + ')';
+        }
+        newRowAbilita.getCell(1).setText(testoCompetenze);
+        nuovaTabellaAbilita.removeRow(nuovaTabellaAbilita.getNumRows() - 2);
+        this.body.insertTable(indiceInserimento++, nuovaTabellaAbilita);
+        this.body.insertParagraph(indiceInserimento++, "");
+
+      }, this);
+
+    } catch (e) {
+      Logger.log("ERRORE in creaTabelleDeiModuli(): " + e.message + " Stack: " + e.stack);
+      throw e;
+    }
+    return this;
+  }
+
+  _trovaERimuoviTabelleTemplate(tags) {
+    var templates = {};
+    var posizione = -1;
+    var tabelle = this.body.getTables();
+    var tagNormalizzati = tags.map(function(t) { return t.replace(/\s/g, '').toLowerCase(); });
+
+    tags.forEach(function(tag, index) {
+      for (var i = 0; i < tabelle.length; i++) {
+        var testoCella = tabelle[i].getRow(0).getCell(0).getText().replace(/\s/g, '').toLowerCase();
+        if (testoCella === tagNormalizzati[index]) {
+          templates[tag] = tabelle[i].copy();
+          var indiceTabella = this.body.getChildIndex(tabelle[i]);
+          if (posizione === -1 || indiceTabella < posizione) {
+            posizione = indiceTabella;
+          }
+          tabelle[i].removeFromParent();
+          break;
+        }
+      }
+    }, this);
+
+    if (Object.keys(templates).length !== tags.length) {
+      throw new Error("Non è stato possibile trovare tutte le tabelle template.");
+    }
+    return { templates: templates, posizione: posizione };
   }
 
   /**
