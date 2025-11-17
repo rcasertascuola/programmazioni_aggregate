@@ -317,16 +317,40 @@ class GestoreDocumento {
         var cellaAbilita = newRowAbilita.getCell(0);
         cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
 
-        var primoParagrafo = cellaAbilita.getParagraphs()[0];
+        var primoParagrafo = cellaAbilita.getChild(0).asParagraph();
         primoParagrafo.appendText("abilità cognitive: ").setBold(true);
-        primoParagrafo.appendText(modulo.abilità_specifiche_cognitive).setBold(false);
+        if (modulo.abilità_specifiche_cognitive) {
+          primoParagrafo.appendText(String(modulo.abilità_specifiche_cognitive)).setBold(false);
+        }
 
         var secondoParagrafo = cellaAbilita.appendParagraph('');
         secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
-        secondoParagrafo.appendText(modulo.abilità_specifiche_pratiche + ' (' + modulo.abilità + ')').setBold(false);
 
-        var competenzeTesto = modulo.competenze_specifiche + ' (' + modulo.competenze + ')';
-        newRowAbilita.getCell(1).setText(competenzeTesto);
+        var testoPratiche = '';
+        var pratiche = modulo.abilità_specifiche_pratiche || '';
+        var abilita = modulo.abilità || '';
+        if (pratiche && abilita) {
+          testoPratiche = pratiche + ' (' + abilita + ')';
+        } else if (pratiche) {
+          testoPratiche = pratiche;
+        } else if (abilita) {
+          testoPratiche = '(' + abilita + ')';
+        }
+        if (testoPratiche) {
+          secondoParagrafo.appendText(testoPratiche).setBold(false);
+        }
+
+        var testoCompetenze = '';
+        var specifiche = modulo.competenze_specifiche || '';
+        var competenze = modulo.competenze || '';
+        if (specifiche && competenze) {
+          testoCompetenze = specifiche + ' (' + competenze + ')';
+        } else if (specifiche) {
+          testoCompetenze = specifiche;
+        } else if (competenze) {
+          testoCompetenze = '(' + competenze + ')';
+        }
+        newRowAbilita.getCell(1).setText(testoCompetenze);
         nuovaTabellaAbilita.removeRow(nuovaTabellaAbilita.getNumRows() - 2);
         this.body.insertTable(indiceInserimento++, nuovaTabellaAbilita);
         this.body.insertParagraph(indiceInserimento++, "");
