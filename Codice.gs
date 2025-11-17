@@ -56,9 +56,10 @@ function funzionePrincipale() {
     var datiUd = dataManager.getSheetData("ud");
 
     // Filtra i moduli in base all'alias_disciplina della programmazione
-    const aliasDisciplinaCorrente = datiMerge[i]['alias_disciplina'];
+    const aliasDisciplinaCorrente = String(datiMerge[i]['alias_disciplina'] || '').trim().toLowerCase();
     var moduliFiltrati = datiModuli.filter(function(modulo) {
-      return modulo.alias_disciplina === aliasDisciplinaCorrente;
+      // Confronto robusto che ignora spazi bianchi extra e maiuscole/minuscole
+      return String(modulo.alias_disciplina || '').trim().toLowerCase() === aliasDisciplinaCorrente;
     });
 
     // Ordina i moduli filtrati in base alla colonna 'ordine'
@@ -84,8 +85,8 @@ function funzionePrincipale() {
       .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
       .inserisciTabella('NUCLEI', dataManager.getSheetData("nuclei_fondanti"), ['codice', 'descrizione'], { 'anno': datiMerge[i]['classe'] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})  
       .inserisciTabella('RISULTATI', dataManager.getSheetData("risultati_minimi"), ['codice', 'descrizione'])  
-      .inserisciTabella('CONOSCENZE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]}) 
-      .inserisciTabella('ABILITÀ', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})    
+      .inserisciTabella('CONOSCENZE ATTESE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})
+      .inserisciTabella('ABILITÀ ATTESE', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})
       .creaTabelleDeiModuli(moduliFiltrati, datiUd)
       .finalizza(); // Salva e chiude
 
@@ -192,38 +193,51 @@ class GestoreDocumento {
     var datiFiltrati = datiTabella;
     if (filtro) {
       datiFiltrati = datiTabella.filter(function(riga) {
-        var andMatch = true;
-        var orMatch = false;
+        var allOrConditions = [];
+        var andConditions = {};
 
-        // Controlla prima le condizioni AND
+        // Separa le condizioni AND da quelle OR
         for (var chiave in filtro) {
-          if (chiave !== '$or') {
-            if (!riga.hasOwnProperty(chiave) || String(riga[chiave]) !== String(filtro[chiave])) {
-              andMatch = false;
-              break;
-            }
+          if (chiave === '$or') {
+            allOrConditions.push(filtro[chiave]);
+          } else {
+            andConditions[chiave] = filtro[chiave];
           }
         }
 
-        if (!andMatch) return false; // Se la parte AND fallisce, la riga è esclusa
+        // 1. Controlla tutte le condizioni AND
+        var andMatch = true;
+        for (var chiaveAnd in andConditions) {
+          var valoreRiga = String(riga[chiaveAnd] || '').trim().toLowerCase();
+          var valoreFiltro = String(andConditions[chiaveAnd] || '').trim().toLowerCase();
+          if (!riga.hasOwnProperty(chiaveAnd) || valoreRiga !== valoreFiltro) {
+            andMatch = false;
+            break;
+          }
+        }
 
-        // Se ci sono condizioni OR, controllale
-        if (filtro['$or']) {
-          var orConditions = filtro['$or'];
-          for (var i = 0; i < orConditions.length; i++) {
-            var condition = orConditions[i];
-            for (var chiave in condition) {
-              if (riga.hasOwnProperty(chiave) && String(riga[chiave]) === String(condition[chiave])) {
-                orMatch = true;
+        if (!andMatch) return false;
+
+        // 2. Controlla che OGNI gruppo di condizioni OR sia soddisfatto
+        for (var i = 0; i < allOrConditions.length; i++) {
+          var orGroup = allOrConditions[i];
+          var orGroupMatch = false;
+          for (var j = 0; j < orGroup.length; j++) {
+            var condition = orGroup[j];
+            for (var chiaveOr in condition) {
+               var valoreRiga = String(riga[chiaveOr] || '').trim().toLowerCase();
+               var valoreFiltro = String(condition[chiaveOr] || '').trim().toLowerCase();
+               if (riga.hasOwnProperty(chiaveOr) && valoreRiga === valoreFiltro) {
+                orGroupMatch = true;
                 break;
               }
             }
-            if (orMatch) break;
+            if (orGroupMatch) break;
           }
-          return orMatch; // Il risultato finale dipende dalla corrispondenza OR
+          if (!orGroupMatch) return false;
         }
 
-        return true; // Se c'erano solo condizioni AND e sono state superate
+        return true;
       });
       Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
     }
@@ -255,13 +269,26 @@ class GestoreDocumento {
         colonneDaInserire.forEach(function(chiave, index) {
             var valore = String(dataObject[chiave] || '');
             var cella = newRow.getCell(index);
-            var textElement = cella.getChild(0).asParagraph().getChild(0);
-            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
-              var attributi = textElement.asText().getAttributes();
-              cella.setText(valore);
-              cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+            var paragrafo = cella.getChild(0).asParagraph();
+
+            // Check if the paragraph has any children (text runs)
+            if (paragrafo.getNumChildren() > 0) {
+                var textElement = paragrafo.getChild(0);
+                if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+                    // There is text, so we can get attributes
+                    var attributi = textElement.asText().getAttributes();
+                    // Clear the cell and set the new value
+                    cella.setText(valore);
+                    // Reapply the attributes to the new text element
+                    // Note: setText creates a new paragraph and text element
+                    cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+                } else {
+                    // There is a child, but it's not text (e.g., an image). Just set text.
+                    cella.setText(valore);
+                }
             } else {
-              cella.setText(valore);
+                // The paragraph is empty, so there are no attributes to copy. Just set the text.
+                cella.setText(valore);
             }
         });
       });
