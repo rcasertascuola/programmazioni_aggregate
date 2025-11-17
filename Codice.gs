@@ -55,8 +55,14 @@ function funzionePrincipale() {
     var datiModuli = dataManager.getSheetData("moduli");
     var datiUd = dataManager.getSheetData("ud");
 
-    // Ordina i moduli in base alla colonna 'ordine'
-    datiModuli.sort(function(a, b) {
+    // Filtra i moduli in base all'alias_disciplina della programmazione
+    const aliasDisciplinaCorrente = datiMerge[i]['alias_disciplina'];
+    var moduliFiltrati = datiModuli.filter(function(modulo) {
+      return modulo.alias_disciplina === aliasDisciplinaCorrente;
+    });
+
+    // Ordina i moduli filtrati in base alla colonna 'ordine'
+    moduliFiltrati.sort(function(a, b) {
       return a.ordine - b.ordine;
     });
 
@@ -72,11 +78,15 @@ function funzionePrincipale() {
       .sostituisciPlaceholder(datiMerge[i])
       .sostituisciPlaceholder(parametri_elenchi)
       .inserisciTabella('eqf', dataManager.getSheetData("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
-      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .creaTabelleDeiModuli(datiModuli, datiUd)
+      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome'], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome'], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
+      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
+      .inserisciTabella('NUCLEI', dataManager.getSheetData("nuclei_fondanti"), ['codice', 'descrizione'], { 'anno': datiMerge[i]['classe'] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})  
+      .inserisciTabella('RISULTATI', dataManager.getSheetData("risultati_minimi"), ['codice', 'descrizione'])  
+      .inserisciTabella('CONOSCENZE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]}) 
+      .inserisciTabella('ABILITÀ', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})    
+      .creaTabelleDeiModuli(moduliFiltrati, datiUd)
       .finalizza(); // Salva e chiude
 
     Logger.log("PROCESSO COMPLETATO.");
@@ -288,7 +298,7 @@ class GestoreDocumento {
         var attributiModulo = cellaModulo.getChild(0).asParagraph().getChild(0).asText().getAttributes();
         cellaModulo.setText('MODULO ' + modulo.ordine);
         cellaModulo.getChild(0).asParagraph().getChild(0).setAttributes(attributiModulo);
-
+        
         nuovaTabellaModulo.getRow(0).getCell(1).setText('UDA - ' + modulo.titolo_uda + ": " + modulo.titolo);
         nuovaTabellaModulo.getRow(1).getCell(1).setText(modulo.tempi_modulo);
         this.body.insertTable(indiceInserimento++, nuovaTabellaModulo);
@@ -297,7 +307,7 @@ class GestoreDocumento {
         // --- Crea e popola la tabella Unità Didattiche ---
         var datiUdFiltrati = datiUd.filter(function(ud) { return ud.id_modulo === modulo.id; });
         datiUdFiltrati.sort(function(a, b) { return a.ordinale - b.ordinale; });
-
+        
         var nuovaTabellaUd = infoTabelle.templates['Unità Didattiche'].copy();
         var templateRowUd = nuovaTabellaUd.getRow(nuovaTabellaUd.getNumRows() - 1);
         datiUdFiltrati.forEach(function(ud) {
@@ -313,19 +323,19 @@ class GestoreDocumento {
         var nuovaTabellaAbilita = infoTabelle.templates['Abilità'].copy();
         var templateRowAbilita = nuovaTabellaAbilita.getRow(nuovaTabellaAbilita.getNumRows() - 1);
         var newRowAbilita = nuovaTabellaAbilita.appendTableRow(templateRowAbilita.copy());
-
+        
         var cellaAbilita = newRowAbilita.getCell(0);
         cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
-
+        
         var primoParagrafo = cellaAbilita.getChild(0).asParagraph();
         primoParagrafo.appendText("abilità cognitive: ").setBold(true);
         if (modulo.abilità_specifiche_cognitive) {
           primoParagrafo.appendText(String(modulo.abilità_specifiche_cognitive)).setBold(false);
         }
-
+        
         var secondoParagrafo = cellaAbilita.appendParagraph('');
         secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
-
+        
         var testoPratiche = '';
         var pratiche = modulo.abilità_specifiche_pratiche || '';
         var abilita = modulo.abilità || '';
@@ -380,7 +390,7 @@ class GestoreDocumento {
             posizione = indiceTabella;
           }
           tabelle[i].removeFromParent();
-          break;
+          break; 
         }
       }
     }, this);
