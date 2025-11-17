@@ -270,25 +270,26 @@ class GestoreDocumento {
             var valore = String(dataObject[chiave] || '');
             var cella = newRow.getCell(index);
             var paragrafo = cella.getChild(0).asParagraph();
+            var attributiTesto = {};
 
-            // Check if the paragraph has any children (text runs)
-            if (paragrafo.getNumChildren() > 0) {
-                var textElement = paragrafo.getChild(0);
-                if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
-                    // There is text, so we can get attributes
-                    var attributi = textElement.asText().getAttributes();
-                    // Clear the cell and set the new value
-                    cella.setText(valore);
-                    // Reapply the attributes to the new text element
-                    // Note: setText creates a new paragraph and text element
-                    cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
-                } else {
-                    // There is a child, but it's not text (e.g., an image). Just set text.
-                    cella.setText(valore);
+            // Conserva gli attributi del testo originale, se esiste.
+            if (paragrafo.getNumChildren() > 0 && paragrafo.getChild(0).getType() == DocumentApp.ElementType.TEXT) {
+                var attributiOriginali = paragrafo.getChild(0).asText().getAttributes();
+                // Rimuovi eventuali attributi nulli che potrebbero causare errori.
+                for (var attr in attributiOriginali) {
+                    if (attributiOriginali[attr] !== null) {
+                        attributiTesto[attr] = attributiOriginali[attr];
+                    }
                 }
-            } else {
-                // The paragraph is empty, so there are no attributes to copy. Just set the text.
-                cella.setText(valore);
+            }
+
+            // Svuota il paragrafo e inserisci il nuovo valore.
+            paragrafo.clear();
+            var nuovoElementoTesto = paragrafo.appendText(valore);
+
+            // Applica gli stili al nuovo testo.
+            if (Object.keys(attributiTesto).length > 0) {
+                nuovoElementoTesto.setAttributes(attributiTesto);
             }
         });
       });
@@ -329,7 +330,6 @@ class GestoreDocumento {
         nuovaTabellaModulo.getRow(0).getCell(1).setText('UDA - ' + modulo.titolo_uda + ": " + modulo.titolo);
         nuovaTabellaModulo.getRow(1).getCell(1).setText(modulo.tempi_modulo);
         this.body.insertTable(indiceInserimento++, nuovaTabellaModulo);
-        this.body.insertParagraph(indiceInserimento++, "");
 
         // --- Crea e popola la tabella Unità Didattiche ---
         var datiUdFiltrati = datiUd.filter(function(ud) { return ud.id_modulo === modulo.id; });
@@ -344,7 +344,6 @@ class GestoreDocumento {
         });
         nuovaTabellaUd.removeRow(nuovaTabellaUd.getNumRows() - datiUdFiltrati.length - 1);
         this.body.insertTable(indiceInserimento++, nuovaTabellaUd);
-        this.body.insertParagraph(indiceInserimento++, "");
 
         // --- Crea e popola la tabella Abilità ---
         var nuovaTabellaAbilita = infoTabelle.templates['Abilità'].copy();
@@ -390,7 +389,6 @@ class GestoreDocumento {
         newRowAbilita.getCell(1).setText(testoCompetenze);
         nuovaTabellaAbilita.removeRow(nuovaTabellaAbilita.getNumRows() - 2);
         this.body.insertTable(indiceInserimento++, nuovaTabellaAbilita);
-        this.body.insertParagraph(indiceInserimento++, "");
 
       }, this);
 
