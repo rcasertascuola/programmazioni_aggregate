@@ -255,13 +255,26 @@ class GestoreDocumento {
         colonneDaInserire.forEach(function(chiave, index) {
             var valore = String(dataObject[chiave] || '');
             var cella = newRow.getCell(index);
-            var textElement = cella.getChild(0).asParagraph().getChild(0);
-            if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
-              var attributi = textElement.asText().getAttributes();
-              cella.setText(valore);
-              cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+            var paragrafo = cella.getChild(0).asParagraph();
+
+            // Check if the paragraph has any children (text runs)
+            if (paragrafo.getNumChildren() > 0) {
+                var textElement = paragrafo.getChild(0);
+                if (textElement && textElement.getType() == DocumentApp.ElementType.TEXT) {
+                    // There is text, so we can get attributes
+                    var attributi = textElement.asText().getAttributes();
+                    // Clear the cell and set the new value
+                    cella.setText(valore);
+                    // Reapply the attributes to the new text element
+                    // Note: setText creates a new paragraph and text element
+                    cella.getChild(0).asParagraph().getChild(0).setAttributes(attributi);
+                } else {
+                    // There is a child, but it's not text (e.g., an image). Just set text.
+                    cella.setText(valore);
+                }
             } else {
-              cella.setText(valore);
+                // The paragraph is empty, so there are no attributes to copy. Just set the text.
+                cella.setText(valore);
             }
         });
       });
