@@ -39,24 +39,28 @@ function main() {
       throw new Error("Nessun dato trovato nel foglio 'programmazioni'.");
     }
 
-    // Itera su ogni riga del foglio "programmazioni" (attualmente gestisce solo la prima).
-    // TODO: Gestire la generazione per più righe se necessario.
-    const contestoCorrente = datiProgrammazioni[0];
-    const nomeNuovoFile = `${contestoCorrente['anno_scolastico']} ${contestoCorrente['classe']} ${contestoCorrente['corso']} ${contestoCorrente['alias_disciplina']}`;
+    // Itera su ogni riga del foglio "programmazioni".
+    datiProgrammazioni.forEach((contestoCorrente, index) => {
+      Logger.log(`--- Avvio elaborazione per riga ${index + 1} ---`);
 
-    const idTemplate = datiTemplates['id_template'];
-    const idCartella = datiTemplates['cartella_destinazione'];
+      const nomeNuovoFile = `${contestoCorrente['anno_scolastico']} ${contestoCorrente['classe']} ${contestoCorrente['corso']} ${contestoCorrente['alias_disciplina']}`;
 
-    if (!idTemplate || !idCartella) {
-      throw new Error("ID del template o della cartella di destinazione non trovati nel foglio 'templates'.");
-    }
+      const idTemplate = datiTemplates['id_template'];
+      const idCartella = datiTemplates['cartella_destinazione'];
 
-    // Avvia il processo di costruzione del documento.
-    const builder = new DocumentBuilder(idTemplate, idCartella, nomeNuovoFile);
-    builder.build(settings, dataManager, contestoCorrente);
+      if (!idTemplate || !idCartella) {
+        throw new Error("ID del template o della cartella di destinazione non trovati nel foglio 'templates'.");
+      }
 
-    Logger.log(`PROCESSO COMPLETATO. Documento creato: ${builder.getFileUrl()}`);
-    SpreadsheetApp.getUi().alert(`Processo completato con successo!`);
+      // Avvia il processo di costruzione del documento.
+      const builder = new DocumentBuilder(idTemplate, idCartella, nomeNuovoFile);
+      builder.build(settings, dataManager, contestoCorrente);
+
+      Logger.log(`Documento per la riga ${index + 1} creato: ${builder.getFileUrl()}`);
+    });
+
+    Logger.log(`PROCESSO COMPLETATO. Elaborate ${datiProgrammazioni.length} righe.`);
+    SpreadsheetApp.getUi().alert(`Processo completato con successo! Generati ${datiProgrammazioni.length} documenti.`);
 
   } catch (e) {
     Logger.log(`ERRORE FATALE: ${e.message}\nStack: ${e.stack}`);
