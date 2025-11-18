@@ -1,553 +1,611 @@
-/*
- * IDs da configurare (Queste sono solo impostazioni predefinite, 
- * verranno sovrascritte dalla scheda 'templates' se trovate)
+/**
+ * @fileoverview Script per la generazione automatizzata di documenti Google Docs
+ * basato su un sistema di configurazione flessibile definito in un foglio di calcolo.
+ *
+ * @version 2.0.0
+ * @author Jules - AI Software Engineer
  */
 
+// =================================================================
+// 1. ENTRY POINT & MENU UI
+// =================================================================
+
 /**
- * 1. CREARE UNA VOCE DI MENU
- * (Cambiato il nome della funzione chiamata in 'funzionePrincipale')
+ * Funzione eseguita all'apertura del foglio di calcolo.
+ * Aggiunge un menu personalizzato per avviare la generazione del documento.
  */
 function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu('Azioni Sinossi')
-      .addItem('Crea Sinossi', 'funzionePrincipale') // Corrisponde alla funzione principale
-      .addToUi();
+  SpreadsheetApp.getUi()
+    .createMenu('Genera Documento')
+    .addItem('Crea Sinossi', 'main')
+    .addToUi();
 }
 
 /**
- * Funzione principale chiamata dal menu, ora con gestione degli errori.
+ * Funzione principale che orchestra l'intero processo di generazione del documento.
+ * Viene eseguita quando l'utente clicca sulla voce di menu.
  */
-
-function funzionePrincipale() {
+function main() {
   try {
-    // 1. CARICA CONFIGURAZIONE
-    var dataManager = new DataManager();
-    var config = dataManager.getSheetData("templates");
-
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
-      throw new Error("Formato dati 'templates' non valido. Mi aspetto un oggetto Chiave/Valore.");
-    }
-    const idCartella = config['cartella_destinazione'];
-    const idTemplate = config['id_template'];
-    if (!idCartella || !idTemplate) {
-      throw new Error("Configurazione 'templates' incompleta.");
-    }
-  
-    var parametri_elenchi = dataManager.getSheetData("parametri_elenchi");
-    if (!config || typeof parametri_elenchi !== 'object' || Array.isArray(config)) {
-      throw new Error("Formato dati 'parametri_elenchi' non valido. Mi aspetto un oggetto Chiave/Valore.");
-    }
-    var i = 0
+    const dataManager = new DataManager();
+    const settingsManager = new SettingsManager(dataManager);
     
-    // 2. CARICA DATI PER MERGE
-    var datiMerge = dataManager.getSheetData("programmazioni");
+    // Carica la configurazione e i dati di base.
+    const settings = settingsManager.getSettings();
+    const datiProgrammazioni = dataManager.getSheetData("programmazioni");
+    const datiTemplates = dataManager.getSheetData("templates");
     
-    if (!datiMerge[i] || typeof datiMerge[i] !== 'object' || Array.isArray(datiMerge[i])) {
-      throw new Error("Formato dati 'programmazioni' non valido. Mi aspetto un oggetto Chiave/Valore.");
+    if (!datiProgrammazioni || datiProgrammazioni.length === 0) {
+      throw new Error("Nessun dato trovato nel foglio 'programmazioni'.");
     }
-    const nomeNuovoFile = datiMerge[i]['anno_scolastico'] + " " + datiMerge[i]['classe'] + datiMerge[i]['corso'] + " " + datiMerge[i]['alias_disciplina'];
-    if (!datiMerge[i]['anno_scolastico'] || !datiMerge[i]['classe'] || !datiMerge[i]['corso'] || !datiMerge[i]['alias_disciplina']) {
-      throw new Error("Dati insufficienti in 'programmazioni' per creare il nome del file. Sono richiesti 'anno_scolastico', 'classe', 'corso', e 'alias_disciplina'.");
+
+    // Itera su ogni riga del foglio "programmazioni" (attualmente gestisce solo la prima).
+    // TODO: Gestire la generazione per più righe se necessario.
+    const contestoCorrente = datiProgrammazioni[0];
+    const nomeNuovoFile = `${contestoCorrente['anno_scolastico']} ${contestoCorrente['classe']} ${contestoCorrente['corso']} ${contestoCorrente['alias_disciplina']}`;
+
+    const idTemplate = datiTemplates['id_template'];
+    const idCartella = datiTemplates['cartella_destinazione'];
+
+    if (!idTemplate || !idCartella) {
+      throw new Error("ID del template o della cartella di destinazione non trovati nel foglio 'templates'.");
     }
-    delete datiMerge['alias']; // Rimuovilo così non cerca di sostituire {{nome_file}}
-  
-    // Carica i dati per le nuove tabelle
-    var datiModuli = dataManager.getSheetData("moduli");
-    var datiUd = dataManager.getSheetData("ud");
 
-    // Filtra i moduli in base all'alias_disciplina della programmazione
-    const aliasDisciplinaCorrente = datiMerge[i]['alias_disciplina'];
-    var moduliFiltrati = datiModuli.filter(function(modulo) {
-      return modulo.alias_disciplina === aliasDisciplinaCorrente;
-    });
+    // Avvia il processo di costruzione del documento.
+    const builder = new DocumentBuilder(idTemplate, idCartella, nomeNuovoFile);
+    builder.build(settings, dataManager, contestoCorrente);
 
-    // Ordina i moduli filtrati in base alla colonna 'ordine'
-    moduliFiltrati.sort(function(a, b) {
-      return a.ordine - b.ordine;
-    });
-
-    // 3. USA IL GESTORE DOCUMENTO
-    Logger.log("Avvio GestoreDocumento...");
-    
-    // Inizializza l'oggetto con la configurazione
-    var gestore = new GestoreDocumento(idTemplate, idCartella);
-    
-    // Esegui i metodi in sequenza
-    var nuovoDocumento = gestore
-      .crea(nomeNuovoFile)
-      .sostituisciPlaceholder(datiMerge[i])
-      .sostituisciPlaceholder(parametri_elenchi)
-      .inserisciTabella('eqf', dataManager.getSheetData("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
-      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .creaTabelleDeiModuli(moduliFiltrati, datiUd)
-      .finalizza(); // Salva e chiude
-
-    Logger.log("PROCESSO COMPLETATO.");
-    Logger.log("Nuovo documento disponibile a: " + nuovoDocumento.url);
+    Logger.log(`PROCESSO COMPLETATO. Documento creato: ${builder.getFileUrl()}`);
+    SpreadsheetApp.getUi().alert(`Processo completato con successo!`);
 
   } catch (e) {
-    // Un singolo blocco catch intercetterà qualsiasi errore
-    // lanciato dalla classe o dalla logica principale.
-    Logger.log("ERRORE FATALE in funzionePrincipale: " + e.message);
-    Logger.log("Stack: " + e.stack);
+    Logger.log(`ERRORE FATALE: ${e.message}\nStack: ${e.stack}`);
+    SpreadsheetApp.getUi().alert(`Errore durante l'esecuzione: ${e.message}`);
   }
 }
 
-
+// =================================================================
+// 2. ORCHESTRAZIONE DELLA CREAZIONE DEL DOCUMENTO
+// =================================================================
 
 /**
- * Classe per gestire la creazione e la manipolazione di un documento
- * a partire da un template.
+ * Gestisce l'intero ciclo di vita della creazione di un documento:
+ * clonazione, sostituzione placeholder e popolamento delle tabelle.
+ * @class
  */
-class GestoreDocumento {
-  
+class DocumentBuilder {
   /**
-   * @param {string} idTemplate L'ID del file template di Google Docs.
-   * @param {string} idCartella L'ID della cartella Drive di destinazione.
+   * @param {string} templateId L'ID del file template di Google Docs.
+   * @param {string} folderId L'ID della cartella Drive di destinazione.
+   * @param {string} outputFileName Il nome del file di output.
    */
-  constructor(idTemplate, idCartella) {
-    if (!idTemplate || !idCartella) {
-      throw new Error("ID Template e ID Cartella sono obbligatori per il costruttore.");
-    }
-    this.idTemplate = idTemplate;
-    this.idCartella = idCartella;
+  constructor(templateId, folderId, outputFileName) {
+    this.templateId = templateId;
+    this.folderId = folderId;
+    this.outputFileName = outputFileName;
     
-    // Proprietà che verranno valorizzate dai metodi
-    this.fileCopia = null; // Il file Drive clonato
-    this.doc = null;       // Il documento DocumentApp aperto
-    this.body = null;      // Il corpo (body) del documento
+    this.doc = null;
+    this.body = null;
+    this.file = null;
   }
 
   /**
-   * 1. Clona il template e apre il nuovo documento.
-   * @param {string} nomeNuovoFile Il nome da dare al file clonato.
+   * Esegue tutti i passaggi per costruire il documento.
+   * @param {Array<Object>} settings Le configurazioni per le tabelle.
+   * @param {DataManager} dataManager L'istanza per accedere ai dati.
+   * @param {Object} context I dati della riga corrente di "programmazioni".
    */
-  crea(nomeNuovoFile) {
-    if (!nomeNuovoFile) {
-      throw new Error("Il 'nomeNuovoFile' è obbligatorio per il metodo crea().");
-    }
-    try {
-      var cartellaDestinazione = DriveApp.getFolderById(this.idCartella);
-      var templateFile = DriveApp.getFileById(this.idTemplate);
-      
-      this.fileCopia = templateFile.makeCopy(nomeNuovoFile, cartellaDestinazione);
-      this.doc = DocumentApp.openById(this.fileCopia.getId());
-      this.body = this.doc.getBody();
-      
-      Logger.log("Documento clonato e aperto. ID: " + this.doc.getId());
-      return this; // Permette il "chaining" (es. gestore.crea().sostituisci())
-      
-    } catch (e) {
-      Logger.log("ERRORE in crea(): " + e.message);
-      // Rilancia l'errore per fermare l'esecuzione in funzionePrincipale
-      throw new Error("Fallimento clonazione: " + e.message); 
+  build(settings, dataManager, context) {
+    this._cloneTemplate();
+    this._replacePlaceholders(context);
+    this._processTables(settings, dataManager, context);
+    this.doc.saveAndClose();
+    Logger.log("Documento salvato e chiuso.");
+  }
+
+  /**
+   * Restituisce l'URL del documento generato.
+   * @returns {string}
+   */
+  getFileUrl() {
+    return this.file ? this.file.getUrl() : '';
+  }
+
+  /**
+   * Clona il documento template.
+   * @private
+   */
+  _cloneTemplate() {
+    const templateFile = DriveApp.getFileById(this.templateId);
+    const destinationFolder = DriveApp.getFolderById(this.folderId);
+    this.file = templateFile.makeCopy(this.outputFileName, destinationFolder);
+    this.doc = DocumentApp.openById(this.file.getId());
+    this.body = this.doc.getBody();
+    Logger.log(`Template clonato. Nuovo ID: ${this.doc.getId()}`);
+  }
+
+  /**
+   * Sostituisce i placeholder globali (es. {{anno_scolastico}}).
+   * @param {Object} context L'oggetto contenente i dati per la sostituzione.
+   * @private
+   */
+  _replacePlaceholders(context) {
+    Logger.log("Sostituzione dei placeholder globali...");
+    for (const key in context) {
+      if (context.hasOwnProperty(key)) {
+        this.body.replaceText(`{{${key}}}`, context[key]);
+      }
     }
   }
 
   /**
-   * 2. Sostituisce tutti i placeholder {{chiave}} con i valori di un oggetto.
-   * @param {Object} dati Oggetto {chiave: valore} per le sostituzioni.
+   * Itera attraverso le tabelle del documento e le processa in base alla configurazione.
+   * @param {Array<Object>} settings Le configurazioni per le tabelle.
+   * @param {DataManager} dataManager L'istanza per accedere ai dati.
+   * @param {Object} context I dati della riga corrente.
+   * @private
    */
-  sostituisciPlaceholder(dati) {
-    if (!this.body) {
-      throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
-    }
-    try {
-      Logger.log("Avvio sostituzione placeholder...");
-      for (var chiave in dati) {
-        if (dati.hasOwnProperty(chiave)) {
-          // Usiamo replaceText per sostituire tutte le occorrenze
-          this.body.replaceText('{{' + chiave + '}}', dati[chiave]);
+  _processTables(settings, dataManager, context) {
+    const tableFactory = new TableFactory();
+    const tables = this.body.getTables();
+
+    tables.forEach(table => {
+      if (table.getNumRows() === 0 || table.getRow(0).getNumCells() === 0) return;
+
+      const templateName = table.getRow(0).getCell(0).getText().trim();
+      const config = settings.find(s => s.NomeTabellaTemplate === templateName);
+
+      if (config) {
+        Logger.log(`Trovata corrispondenza per la tabella template: "${templateName}"`);
+        try {
+          const tableLogic = tableFactory.create(config, dataManager, this.body, context);
+          tableLogic.execute(table);
+        } catch (e) {
+          Logger.log(`Errore durante l'elaborazione della tabella "${templateName}": ${e.message}`);
+          // Continua con le altre tabelle
         }
       }
-      Logger.log("Sostituzione completata.");
-      return this; // Permette il chaining
-      
-    } catch (e) {
-      Logger.log("ERRORE in sostituisciPlaceholder(): " + e.message);
-      throw e;
-    }
-  }
-
-  /**
-   * 3. Trova una tabella, ne usa l'ultima riga come template e la popola, con un filtro opzionale.
-   * @param {string} tagTabella - La stringa (es. '{{TABELLA_DATI}}') da cercare nella *prima riga* della tabella.
-   * @param {Object[]} datiTabella - L'array di oggetti da inserire.
-   * @param {string[]} colonneDaInserire - Array di stringhe (es. ['nome', 'email']) che definiscono quali colonne estrarre.
-   * @param {Object} [filtro=null] - Un oggetto opzionale per filtrare i dati (es. {'colonna': 'valore'}).
-   */
-  inserisciTabella(tagTabella, datiTabella, colonneDaInserire, filtro = null) {
-    if (!this.body) {
-      throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
-    }
-
-    // Applica il filtro se fornito
-    var datiFiltrati = datiTabella;
-    if (filtro) {
-      datiFiltrati = datiTabella.filter(function(riga) {
-        var allOrConditions = [];
-        var andConditions = {};
-
-        // Separa le condizioni AND da quelle OR
-        for (var chiave in filtro) {
-          if (chiave === '$or') {
-            allOrConditions.push(filtro[chiave]);
-          } else {
-            andConditions[chiave] = filtro[chiave];
-          }
-        }
-
-        // 1. Controlla tutte le condizioni AND
-        var andMatch = true;
-        for (var chiaveAnd in andConditions) {
-          var valoreRiga = String(riga[chiaveAnd] || '').trim().toLowerCase();
-          var valoreFiltro = String(andConditions[chiaveAnd] || '').trim().toLowerCase();
-          if (!riga.hasOwnProperty(chiaveAnd) || valoreRiga !== valoreFiltro) {
-            andMatch = false;
-            break;
-          }
-        }
-
-        if (!andMatch) return false;
-
-        // 2. Controlla che OGNI gruppo di condizioni OR sia soddisfatto
-        for (var i = 0; i < allOrConditions.length; i++) {
-          var orGroup = allOrConditions[i];
-          var orGroupMatch = false;
-          for (var j = 0; j < orGroup.length; j++) {
-            var condition = orGroup[j];
-            for (var chiaveOr in condition) {
-               var valoreRiga = String(riga[chiaveOr] || '').trim().toLowerCase();
-               var valoreFiltro = String(condition[chiaveOr] || '').trim().toLowerCase();
-               if (riga.hasOwnProperty(chiaveOr) && valoreRiga === valoreFiltro) {
-                orGroupMatch = true;
-                break;
-              }
-            }
-            if (orGroupMatch) break;
-          }
-          if (!orGroupMatch) return false;
-        }
-
-        return true;
-      });
-      Logger.log("Dati filtrati. Righe rimanenti: " + datiFiltrati.length);
-    }
-
-    if (!datiFiltrati || datiFiltrati.length === 0) {
-      Logger.log("Nessun dato da inserire nella tabella dopo il filtraggio.");
-      return this;
-    }
-
-    try {
-      var targetTable = null;
-      var tables = this.body.getTables();
-      for (var i = 0; i < tables.length; i++) {
-        if (tables[i].getNumRows() > 0 && tables[i].getRow(0).getText().includes(tagTabella)) {
-          targetTable = tables[i];
-          break;
-        }
-      }
-
-      if (!targetTable) throw new Error("Tabella con tag '" + tagTabella + "' non trovata.");
-      Logger.log("Tabella trovata.");
-
-      if (targetTable.getNumRows() < 2) throw new Error("La tabella deve avere almeno 2 righe.");
-      
-      var templateRow = targetTable.getRow(targetTable.getNumRows() - 1);
-      
-      datiFiltrati.forEach(function(dataObject) {
-        var newRow = targetTable.appendTableRow(templateRow.copy());
-        colonneDaInserire.forEach(function(chiave, index) {
-            var valore = String(dataObject[chiave] || '');
-            var cella = newRow.getCell(index);
-            var paragrafo = cella.getChild(0).asParagraph();
-            var attributiTesto = {};
-
-            // Conserva gli attributi del testo originale, se esiste.
-            if (paragrafo.getNumChildren() > 0 && paragrafo.getChild(0).getType() == DocumentApp.ElementType.TEXT) {
-                var attributiOriginali = paragrafo.getChild(0).asText().getAttributes();
-                // Rimuovi eventuali attributi nulli che potrebbero causare errori.
-                for (var attr in attributiOriginali) {
-                    if (attributiOriginali[attr] !== null) {
-                        attributiTesto[attr] = attributiOriginali[attr];
-                    }
-                }
-            }
-
-            // Svuota il paragrafo e inserisci il nuovo valore.
-            paragrafo.clear();
-            var nuovoElementoTesto = paragrafo.appendText(valore);
-
-            // Applica gli stili al nuovo testo.
-            if (Object.keys(attributiTesto).length > 0) {
-                nuovoElementoTesto.setAttributes(attributiTesto);
-            }
-        });
-      });
-
-      targetTable.removeRow(targetTable.getNumRows() - datiFiltrati.length -1);
-      
-      Logger.log("Inserite " + datiFiltrati.length + " righe di dati nella tabella.");
-      return this;
-
-    } catch (e) {
-      Logger.log("ERRORE in inserisciTabella(): " + e.message + " Stack: " + e.stack);
-      throw e;
-    }
-  }
-
-  /**
-   * Crea e popola le tabelle dei moduli, unità didattiche e abilità.
-   * @param {Object[]} datiModuli L'array di oggetti dei moduli.
-   * @param {Object[]} datiUd L'array di oggetti delle unità didattiche.
-   */
-  creaTabelleDeiModuli(datiModuli, datiUd) {
-    if (!this.body) {
-      throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
-    }
-
-    try {
-      var infoTabelle = this._trovaERimuoviTabelleTemplate(['MODULO', 'Unità Didattiche', 'Abilità']);
-      var indiceInserimento = infoTabelle.posizione;
-
-      datiModuli.forEach(function(modulo) {
-        // --- Crea e popola la tabella MODULO ---
-        var nuovaTabellaModulo = infoTabelle.templates['MODULO'].copy();
-        var cellaModulo = nuovaTabellaModulo.getRow(0).getCell(0);
-        var attributiModulo = cellaModulo.getChild(0).asParagraph().getChild(0).asText().getAttributes();
-        cellaModulo.setText('MODULO ' + modulo.ordine);
-        cellaModulo.getChild(0).asParagraph().getChild(0).setAttributes(attributiModulo);
-        
-        nuovaTabellaModulo.getRow(0).getCell(1).setText('UDA - ' + modulo.titolo_uda + ": " + modulo.titolo);
-        nuovaTabellaModulo.getRow(1).getCell(1).setText(modulo.tempi_modulo);
-        this.body.insertTable(indiceInserimento++, nuovaTabellaModulo);
-
-        // --- Crea e popola la tabella Unità Didattiche ---
-        var datiUdFiltrati = datiUd.filter(function(ud) { return ud.id_modulo === modulo.id; });
-        datiUdFiltrati.sort(function(a, b) { return a.ordinale - b.ordinale; });
-        
-        var nuovaTabellaUd = infoTabelle.templates['Unità Didattiche'].copy();
-        var templateRowUd = nuovaTabellaUd.getRow(nuovaTabellaUd.getNumRows() - 1);
-        datiUdFiltrati.forEach(function(ud) {
-          var newRow = nuovaTabellaUd.appendTableRow(templateRowUd.copy());
-          newRow.getCell(0).setText(ud.titolo);
-          newRow.getCell(1).setText(ud.conoscenze);
-        });
-        nuovaTabellaUd.removeRow(nuovaTabellaUd.getNumRows() - datiUdFiltrati.length - 1);
-        this.body.insertTable(indiceInserimento++, nuovaTabellaUd);
-
-        // --- Crea e popola la tabella Abilità ---
-        var nuovaTabellaAbilita = infoTabelle.templates['Abilità'].copy();
-        var templateRowAbilita = nuovaTabellaAbilita.getRow(nuovaTabellaAbilita.getNumRows() - 1);
-        var newRowAbilita = nuovaTabellaAbilita.appendTableRow(templateRowAbilita.copy());
-        
-        var cellaAbilita = newRowAbilita.getCell(0);
-        cellaAbilita.clear(); // Questo lascia un paragrafo vuoto
-        
-        var primoParagrafo = cellaAbilita.getChild(0).asParagraph();
-        primoParagrafo.appendText("abilità cognitive: ").setBold(true);
-        if (modulo.abilità_specifiche_cognitive) {
-          primoParagrafo.appendText(String(modulo.abilità_specifiche_cognitive)).setBold(false);
-        }
-        
-        var secondoParagrafo = cellaAbilita.appendParagraph('');
-        secondoParagrafo.appendText("abilità teoriche: ").setBold(true);
-        
-        var testoPratiche = '';
-        var pratiche = modulo.abilità_specifiche_pratiche || '';
-        var abilita = modulo.abilità || '';
-        if (pratiche && abilita) {
-          testoPratiche = pratiche + ' (' + abilita + ')';
-        } else if (pratiche) {
-          testoPratiche = pratiche;
-        } else if (abilita) {
-          testoPratiche = '(' + abilita + ')';
-        }
-        if (testoPratiche) {
-          secondoParagrafo.appendText(testoPratiche).setBold(false);
-        }
-
-        var testoCompetenze = '';
-        var specifiche = modulo.competenze_specifiche || '';
-        var competenze = modulo.competenze || '';
-        if (specifiche && competenze) {
-          testoCompetenze = specifiche + ' (' + competenze + ')';
-        } else if (specifiche) {
-          testoCompetenze = specifiche;
-        } else if (competenze) {
-          testoCompetenze = '(' + competenze + ')';
-        }
-        newRowAbilita.getCell(1).setText(testoCompetenze);
-        nuovaTabellaAbilita.removeRow(nuovaTabellaAbilita.getNumRows() - 2);
-        this.body.insertTable(indiceInserimento++, nuovaTabellaAbilita);
-
-      }, this);
-
-    } catch (e) {
-      Logger.log("ERRORE in creaTabelleDeiModuli(): " + e.message + " Stack: " + e.stack);
-      throw e;
-    }
-    return this;
-  }
-
-  _trovaERimuoviTabelleTemplate(tags) {
-    var templates = {};
-    var posizione = -1;
-    var tabelle = this.body.getTables();
-    var tagNormalizzati = tags.map(function(t) { return t.replace(/\s/g, '').toLowerCase(); });
-
-    tags.forEach(function(tag, index) {
-      for (var i = 0; i < tabelle.length; i++) {
-        var testoCella = tabelle[i].getRow(0).getCell(0).getText().replace(/\s/g, '').toLowerCase();
-        if (testoCella === tagNormalizzati[index]) {
-          templates[tag] = tabelle[i].copy();
-          var indiceTabella = this.body.getChildIndex(tabelle[i]);
-          if (posizione === -1 || indiceTabella < posizione) {
-            posizione = indiceTabella;
-          }
-          tabelle[i].removeFromParent();
-          break; 
-        }
-      }
-    }, this);
-
-    if (Object.keys(templates).length !== tags.length) {
-      throw new Error("Non è stato possibile trovare tutte le tabelle template.");
-    }
-    return { templates: templates, posizione: posizione };
-  }
-
-  /**
-   * 4. Salva, chiude il documento e restituisce i riferimenti.
-   */
-  finalizza() {
-    if (!this.doc) {
-      throw new Error("Documento non inizializzato. Chiamare prima il metodo crea().");
-    }
-    
-    try {
-      this.doc.saveAndClose();
-      Logger.log("Documento salvato e chiuso.");
-      
-      return { id: this.fileCopia.getId(), url: this.fileCopia.getUrl() };
-      
-    } catch (e) {
-      Logger.log("ERRORE in finalizza(): " + e.message);
-      
-      // Se il salvataggio fallisce, proviamo a cestinare il file
-      // per evitare di lasciare "spazzatura" in Drive.
-      if (this.fileCopia) {
-        DriveApp.getFileById(this.fileCopia.getId()).setTrashed(true);
-        Logger.log("File clonato parzialmente e spostato nel cestino.");
-      }
-      throw e;
-    }
+    });
   }
 }
 
+// =================================================================
+// 3. GESTIONE DATI E CONFIGURAZIONE
+// =================================================================
+
+/**
+ * Carica e memorizza nella cache i dati dai fogli di calcolo.
+ * @class
+ */
 class DataManager {
   constructor() {
     this.cache = {};
-    this.ss = SpreadsheetApp.getActiveSpreadsheet();
+    this.spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   }
 
   /**
-   * Analizza una tabella in un foglio e restituisce i dati in un formato specifico
-   * basato sulla presenza di intestazioni 'chiave'/'valore' o 'id'.
-   *
-   * @param {string} sheetName Il nome della scheda da cui leggere i dati.
-   * @returns {Object | Array}
-   * - Un Oggetto {k:v} se le colonne 'chiave' e 'valore' sono presenti.
-   * - Un Array di Oggetti [{}, {}] se la colonna 'id' è presente.
-   * - Un Array vuoto [] in tutti gli altri casi o in caso di errore.
+   * Recupera i dati da un foglio. Se i dati sono già in cache, restituisce la versione in cache.
+   * La logica distingue tra tabelle chiave-valore e tabelle di dati standard.
+   * @param {string} sheetName Il nome del foglio da cui leggere i dati.
+   * @returns {Object|Array<Object>} Un oggetto se rileva colonne 'chiave'/'valore', altrimenti un array di oggetti.
    */
   getSheetData(sheetName) {
     if (this.cache[sheetName]) {
       return this.cache[sheetName];
     }
 
-    var sheet = this.ss.getSheetByName(sheetName);
-
-    // --- Gestione Errori Iniziale ---
-    if (sheet == null) {
-      Logger.log("Errore: Scheda '" + sheetName + "' non trovata.");
-      return []; // Restituisce array vuoto
-    }
-    
-    var allData;
-    try {
-      allData = sheet.getDataRange().getValues();
-    } catch (e) {
-      Logger.log("Impossibile leggere i dati dal foglio '" + sheetName + "'. Probabilmente è vuoto.");
-      return []; // Restituisce array vuoto
+    const sheet = this.spreadsheet.getSheetByName(sheetName);
+    if (!sheet) {
+      Logger.log(`Attenzione: Foglio "${sheetName}" non trovato.`);
+      return [];
     }
 
-    // Se il foglio è vuoto (0 righe) o ha solo intestazioni (1 riga)
-    if (allData.length < 2) {
-      Logger.log("Nessuna riga di dati trovata in '" + sheetName + "'.");
-      // Determiniamo cosa restituire in base alle sole intestazioni (se presenti)
-      if (allData.length === 1) {
-        var onlyHeaders = allData[0].map(h => h.toString().trim().toLowerCase());
-        var hasChiave = onlyHeaders.includes('chiave');
-        var hasValore = onlyHeaders.includes('valore');
-        var hasId = onlyHeaders.includes('id');
-
-        if (hasChiave && hasValore) return {}; // Restituisce oggetto vuoto
-        if (hasId) return []; // Restituisce array vuoto
-      }
-      return []; // Default: array vuoto
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) {
+      Logger.log(`Attenzione: Nessun dato trovato nel foglio "${sheetName}".`);
+      return [];
     }
 
-    // --- Elaborazione Dati ---
-
-    // Estrae le intestazioni e le "pulisce"
-    var headers = allData.shift().map(h => h.toString().trim().toLowerCase());
-
-    var hasChiave = headers.includes('chiave');
-    var hasValore = headers.includes('valore');
-    var hasId = headers.includes('id');
-
-    // --- LOGICA DI FORMATTAZIONE ---
+    const headers = data.shift().map(h => String(h).trim().toLowerCase());
+    const hasChiave = headers.includes('chiave');
+    const hasValore = headers.includes('valore');
 
     let result;
-    // CASO 1: Formato Chiave/Valore
-    if (hasChiave && hasValore) {
-      Logger.log("Rilevato formato 'chiave/valore' in '" + sheetName + "'.");
-      var chiaveIndex = headers.indexOf('chiave');
-      var valoreIndex = headers.indexOf('valore');
-      var resultObject = {};
 
-      allData.forEach(function(row) {
-        var key = row[chiaveIndex];
-        if (key && key.toString().trim() !== "") { // Assicura che la chiave esista
-          resultObject[key] = row[valoreIndex];
+    if (hasChiave && hasValore) {
+      // Logica Chiave-Valore
+      const chiaveIndex = headers.indexOf('chiave');
+      const valoreIndex = headers.indexOf('valore');
+      result = data.reduce((obj, row) => {
+        const key = row[chiaveIndex];
+        if (key) {
+          obj[key] = row[valoreIndex];
         }
-      });
-      result = resultObject;
-    }
-    // CASO 2: Formato Tabella con ID (Array di Oggetti)
-    else if (hasId) {
-      Logger.log("Rilevato formato tabella con 'id' in '" + sheetName + "'.");
-      var resultArray = allData.map(function(row) {
-        var rowObject = {};
-        headers.forEach(function(header, index) {
+        return obj;
+      }, {});
+      Logger.log(`Dati da "${sheetName}" caricati come oggetto Chiave/Valore.`);
+
+    } else {
+      // Logica Tabella Standard (Array di Oggetti)
+      result = data.map(row => {
+        const rowObject = {};
+        headers.forEach((header, index) => {
           rowObject[header] = row[index];
         });
         return rowObject;
       });
-      result = resultArray;
-    }
-    // CASO 3: Formato non riconosciuto
-    else {
-      Logger.log("Formato non riconosciuto per '" + sheetName + "'. La tabella non ha né 'chiave'/'valore' né 'id'. Restituisco array vuoto.");
-      result = []; // "vuoto se non si può"
+      Logger.log(`Dati da "${sheetName}" caricati come Array di Oggetti.`);
     }
 
     this.cache[sheetName] = result;
     return result;
+  }
+}
+
+/**
+ * Legge e interpreta la configurazione dal foglio "Settings".
+ * @class
+ */
+class SettingsManager {
+  /**
+   * @param {DataManager} dataManager Un'istanza di DataManager per leggere i dati.
+   */
+  constructor(dataManager) {
+    this.dataManager = dataManager;
+    this.settings = [];
+  }
+
+  /**
+   * Restituisce le configurazioni attive.
+   * @returns {Array<Object>}
+   */
+  getSettings() {
+    if (this.settings.length > 0) {
+      return this.settings;
+    }
+
+    const configData = this.dataManager.getSheetData('Settings');
+    this.settings = configData.filter(row => String(row['Attivo']).trim().toUpperCase() === 'SI');
+    Logger.log(`Caricate ${this.settings.length} configurazioni attive dal foglio "Settings".`);
+
+    return this.settings;
+  }
+}
+
+
+// =================================================================
+// 4. LOGICHE DI POPOLAMENTO TABELLE (FACTORY & STRATEGIES)
+// =================================================================
+
+/**
+ * Factory per creare l'oggetto di logica corretto per un dato tipo di tabella.
+ * @class
+ */
+class TableFactory {
+  /**
+   * Crea un'istanza della classe di logica appropriata.
+   * @param {Object} config La riga di configurazione dal foglio "Settings".
+   * @param {DataManager} dataManager L'istanza per accedere ai dati.
+   * @param {GoogleAppsScript.Document.Body} docBody Il corpo del documento.
+   * @param {Object} context I dati della riga corrente.
+   * @returns {BaseTableLogic} Un'istanza di una classe che estende BaseTableLogic.
+   */
+  create(config, dataManager, docBody, context) {
+    const data = dataManager.getSheetData(config.NomeFoglioDati);
+    switch (config.TipoLogica) {
+      case 'TabellaSemplice':
+        return new SimpleTableLogic(config, data, docBody, context);
+      case 'LogicaModuli':
+        const udData = dataManager.getSheetData('ud'); // Dati specifici per questa logica
+        return new MasterDetailLogic(config, data, docBody, context, udData);
+      default:
+        throw new Error(`TipoLogica non riconosciuto: "${config.TipoLogica}"`);
+    }
+  }
+}
+
+/**
+ * Classe base astratta per tutte le logiche di tabella.
+ * @class
+ */
+class BaseTableLogic {
+  /**
+   * @param {Object} config La riga di configurazione.
+   * @param {Array<Object>|Object} data I dati da inserire.
+   * @param {GoogleAppsScript.Document.Body} docBody Il corpo del documento.
+   * @param {Object} context Il contesto di esecuzione.
+   */
+  constructor(config, data, docBody, context) {
+    this.config = config;
+    this.data = data;
+    this.docBody = docBody;
+    this.context = context;
+  }
+
+  /**
+   * Metodo che deve essere implementato dalle classi figlie.
+   * @param {GoogleAppsScript.Document.Table} table La tabella da popolare.
+   */
+  execute(table) {
+    throw new Error("Il metodo execute() deve essere implementato.");
+  }
+}
+
+/**
+ * Logica per popolare una tabella standard con dati filtrati e ordinati.
+ * @class
+ * @extends BaseTableLogic
+ */
+class SimpleTableLogic extends BaseTableLogic {
+
+  /**
+   * Esegue il popolamento della tabella.
+   * @param {GoogleAppsScript.Document.Table} table La tabella fisica nel documento.
+   */
+  execute(table) {
+    const filteredData = this._filterData(this.data);
+    const sortedData = this._sortData(filteredData);
+
+    if (sortedData.length === 0) {
+      Logger.log(`Nessun dato per la tabella "${this.config.NomeTabellaTemplate}" dopo i filtri. La tabella verrà lasciata vuota o rimossa se necessario.`);
+      // Opcionale: rimuovere la tabella se vuota
+      // table.removeFromParent();
+      return;
+    }
+
+    if (table.getNumRows() < 2) {
+      throw new Error(`La tabella template "${this.config.NomeTabellaTemplate}" deve avere almeno 2 righe (intestazione + riga template).`);
+    }
+
+    const templateRow = table.getRow(table.getNumRows() - 1);
+    const columns = this.config.Colonne.split(',').map(c => c.trim());
+
+    sortedData.forEach(rowData => {
+      const newRow = table.appendTableRow(templateRow.copy());
+      columns.forEach((colName, index) => {
+        if (newRow.getNumCells() > index) {
+          const cell = newRow.getCell(index);
+          const value = String(rowData[colName] || '');
+          this._formatCell(cell, value);
+        }
+      });
+    });
+
+    // Rimuovi la riga template originale
+    table.removeRow(table.getNumRows() - sortedData.length - 1);
+    Logger.log(`Popolate ${sortedData.length} righe nella tabella "${this.config.NomeTabellaTemplate}".`);
+  }
+
+  /**
+   * Formatta una cella preservando lo stile del template.
+   * @param {GoogleAppsScript.Document.TableCell} cell La cella da formattare.
+   * @param {string} text Il testo da inserire.
+   * @private
+   */
+  _formatCell(cell, text) {
+      const paragraph = cell.getChild(0).asParagraph();
+      let attributes = {};
+
+      if (paragraph.getNumChildren() > 0 && paragraph.getChild(0).getType() == DocumentApp.ElementType.TEXT) {
+          const originalAttributes = paragraph.getChild(0).asText().getAttributes();
+          for (const attr in originalAttributes) {
+              if (originalAttributes[attr] !== null) {
+                  attributes[attr] = originalAttributes[attr];
+              }
+          }
+      }
+
+      paragraph.clear();
+      const newTextElement = paragraph.appendText(text);
+
+      if (Object.keys(attributes).length > 0) {
+          newTextElement.setAttributes(attributes);
+      }
+  }
+
+  /**
+   * Filtra i dati in base alla configurazione.
+   * Supporta AND (separati da ';'), OR (sintassi $or(...|...)) e variabili di contesto (es. $periodo).
+   * @param {Array<Object>} data I dati da filtrare.
+   * @returns {Array<Object>} I dati filtrati.
+   * @private
+   */
+  _filterData(data) {
+    if (!this.config.Filtri) return data;
+    
+    const filters = this.config.Filtri.split(';').map(f => f.trim());
+
+    return data.filter(row => {
+      return filters.every(filter => {
+        // Logica OR
+        if (filter.toLowerCase().startsWith('$or(')) {
+          const orConditions = filter.substring(4, filter.length - 1).split('|');
+          return orConditions.some(orCond => this._evaluateCondition(row, orCond));
+        }
+        // Logica AND
+        return this._evaluateCondition(row, filter);
+      });
+    });
+  }
+
+  /**
+   * Valuta una singola condizione di filtro.
+   * @param {Object} row La riga di dati.
+   * @param {string} condition La condizione (es. "tipo=cittadinanza").
+   * @returns {boolean}
+   * @private
+   */
+  _evaluateCondition(row, condition) {
+    const parts = condition.split('=');
+    if (parts.length !== 2) return true; // Condizione malformata, la ignoriamo
+
+    const key = parts[0].trim();
+    let value = parts[1].trim();
+
+    // Sostituisci variabili di contesto
+    if (value.startsWith('$')) {
+      const contextKey = value.substring(1);
+      value = this.context[contextKey] || '';
+    }
+
+    const rowValue = String(row[key] || '').trim().toLowerCase();
+    const filterValue = String(value).trim().toLowerCase();
+
+    return rowValue === filterValue;
+  }
+
+  /**
+   * Ordina i dati in base alla configurazione.
+   * @param {Array<Object>} data I dati da ordinare.
+   * @returns {Array<Object>} I dati ordinati.
+   * @private
+   */
+  _sortData(data) {
+    if (!this.config.Ordinamento) return data;
+
+    const [column, direction] = this.config.Ordinamento.split(':').map(p => p.trim());
+    const desc = direction.toLowerCase() === 'desc';
+
+    return data.sort((a, b) => {
+      if (a[column] < b[column]) return desc ? 1 : -1;
+      if (a[column] > b[column]) return desc ? -1 : 1;
+      return 0;
+    });
+  }
+}
+
+/**
+ * Logica specializzata per creare il blocco di tabelle Modulo, UD e Abilità.
+ * @class
+ * @extends BaseTableLogic
+ */
+class MasterDetailLogic extends BaseTableLogic {
+
+  /**
+   * @param {Object} config La riga di configurazione.
+   * @param {Array<Object>} data I dati dei moduli.
+   * @param {GoogleAppsScript.Document.Body} docBody Il corpo del documento.
+   * @param {Object} context Il contesto di esecuzione.
+   * @param {Array<Object>} udData I dati delle unità didattiche.
+   */
+  constructor(config, data, docBody, context, udData) {
+    super(config, data, docBody, context);
+    this.udData = udData; // Dati aggiuntivi per le sotto-tabelle
+  }
+
+  /**
+   * Esegue la creazione del blocco di tabelle.
+   * Questo metodo ignora il parametro `table` perché deve gestire più tabelle.
+   * @override
+   */
+  execute() {
+    // Applica filtri e ordinamento ai dati principali (moduli)
+    const simpleFilter = new SimpleTableLogic(this.config, this.data, this.docBody, this.context);
+    const filteredModules = simpleFilter._filterData(this.data);
+    const sortedModules = simpleFilter._sortData(filteredModules);
+
+    if (sortedModules.length === 0) {
+      Logger.log("Nessun modulo trovato dopo il filtro. Blocco moduli non creato.");
+      return;
+    }
+
+    const templateTags = ['MODULO', 'Unità Didattiche', 'Abilità'];
+    const { templates, position } = this._findAndRemoveTemplateTables(templateTags);
+    
+    let insertionIndex = position;
+
+    sortedModules.forEach(modulo => {
+      // 1. Popola e inserisci la tabella MODULO
+      this._insertModuloTable(templates['MODULO'], modulo, insertionIndex++);
+
+      // 2. Filtra, popola e inserisci la tabella Unità Didattiche
+      const udFiltrate = this.udData
+        .filter(ud => String(ud.titolo_modulo).trim() === String(modulo.titolo).trim())
+        .sort((a,b) => a.ordinale - b.ordinale);
+      this._insertUdTable(templates['Unità Didattiche'], udFiltrate, insertionIndex++);
+
+      // 3. Popola e inserisci la tabella Abilità
+      this._insertAbilitaTable(templates['Abilità'], modulo, insertionIndex++);
+    });
+  }
+
+  /**
+   * Trova le tabelle template, le copia e le rimuove dal documento.
+   * @param {Array<string>} tags I tag da cercare nella prima cella di ogni tabella.
+   * @returns {{templates: Object, position: number}} Un oggetto con le tabelle copiate e la posizione di inserimento.
+   * @private
+   */
+  _findAndRemoveTemplateTables(tags) {
+    const templates = {};
+    let position = -1;
+    const allTables = this.docBody.getTables();
+
+    tags.forEach(tag => {
+      const foundTable = allTables.find(t => t.getNumRows() > 0 && t.getRow(0).getCell(0).getText().trim() === tag);
+      if (foundTable) {
+        templates[tag] = foundTable.copy();
+        const tableIndex = this.docBody.getChildIndex(foundTable);
+        if (position === -1 || tableIndex < position) {
+          position = tableIndex;
+        }
+        foundTable.removeFromParent();
+      } else {
+        throw new Error(`Tabella template con tag "${tag}" non trovata.`);
+      }
+    });
+
+    if (Object.keys(templates).length !== tags.length) {
+      throw new Error("Non è stato possibile trovare tutte le tabelle template per LogicaModuli.");
+    }
+
+    Logger.log(`Trovate e rimosse le tabelle template per LogicaModuli. Posizione di inserimento: ${position}`);
+    return { templates, position };
+  }
+
+  _insertModuloTable(templateTable, moduloData, index) {
+    const newTable = templateTable.copy();
+    // Esempio di popolamento - adattare alle proprie esigenze
+    newTable.getRow(0).getCell(0).setText(`MODULO ${moduloData.ordine}`);
+    newTable.getRow(0).getCell(1).setText(`UDA - ${moduloData.titolo_uda}: ${moduloData.titolo}`);
+    newTable.getRow(1).getCell(1).setText(moduloData.tempi_modulo);
+    this.docBody.insertTable(index, newTable);
+  }
+
+  _insertUdTable(templateTable, udData, index) {
+    const newTable = templateTable.copy();
+    const templateRow = newTable.getRow(newTable.getNumRows() - 1);
+
+    udData.forEach(ud => {
+      const newRow = newTable.appendTableRow(templateRow.copy());
+      newRow.getCell(0).setText(ud.titolo || '');
+      newRow.getCell(1).setText(ud.conoscenze || '');
+    });
+
+    newTable.removeRow(newTable.getNumRows() - udData.length - 1);
+    this.docBody.insertTable(index, newTable);
+  }
+
+  _insertAbilitaTable(templateTable, moduloData, index) {
+    const newTable = templateTable.copy();
+    const templateRow = newTable.getRow(newTable.getNumRows() - 1);
+    const newRow = newTable.appendTableRow(templateRow.copy());
+
+    const cell = newRow.getCell(0);
+    cell.clear(); // Lascia un paragrafo vuoto
+
+    const p1 = cell.getChild(0).asParagraph();
+    p1.appendText("abilità cognitive: ").setBold(true);
+    p1.appendText(String(moduloData.abilità_specifiche_cognitive || '')).setBold(false);
+
+    const p2 = cell.appendParagraph('');
+    p2.appendText("abilità teoriche: ").setBold(true);
+    const pratiche = `${moduloData.abilità_specifiche_pratiche || ''} (${moduloData.abilità || ''})`.trim();
+    p2.appendText(pratiche).setBold(false);
+
+    const competenze = `${moduloData.competenze_specifiche || ''} (${moduloData.competenze || ''})`.trim();
+    newRow.getCell(1).setText(competenze);
+
+    newTable.removeRow(newTable.getNumRows() - 2);
+    this.docBody.insertTable(index, newTable);
   }
 }
