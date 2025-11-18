@@ -56,10 +56,9 @@ function funzionePrincipale() {
     var datiUd = dataManager.getSheetData("ud");
 
     // Filtra i moduli in base all'alias_disciplina della programmazione
-    const aliasDisciplinaCorrente = String(datiMerge[i]['alias_disciplina'] || '').trim().toLowerCase();
+    const aliasDisciplinaCorrente = datiMerge[i]['alias_disciplina'];
     var moduliFiltrati = datiModuli.filter(function(modulo) {
-      // Confronto robusto che ignora spazi bianchi extra e maiuscole/minuscole
-      return String(modulo.alias_disciplina || '').trim().toLowerCase() === aliasDisciplinaCorrente;
+      return modulo.alias_disciplina === aliasDisciplinaCorrente;
     });
 
     // Ordina i moduli filtrati in base alla colonna 'ordine'
@@ -79,14 +78,10 @@ function funzionePrincipale() {
       .sostituisciPlaceholder(datiMerge[i])
       .sostituisciPlaceholder(parametri_elenchi)
       .inserisciTabella('eqf', dataManager.getSheetData("eqf"), ['periodo',	'livello','conoscenze',	'abilità','competenze'], { 'periodo': datiMerge[i]['periodo'] })
-      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome'], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome'], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
-      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
-      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome' ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})
-      .inserisciTabella('NUCLEI', dataManager.getSheetData("nuclei_fondanti"), ['codice', 'descrizione'], { 'anno': datiMerge[i]['classe'] , '$or': [{ 'alias_disciplina': 'Trs' }, { 'alias_disciplina': datiMerge[i]['alias_disciplina'] }]})  
-      .inserisciTabella('RISULTATI', dataManager.getSheetData("risultati_minimi"), ['codice', 'descrizione'])  
-      .inserisciTabella('CONOSCENZE ATTESE', dataManager.getSheetData("conoscenze"), ['codice', 'titolo', 'fonte' ], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})
-      .inserisciTabella('ABILITÀ ATTESE', dataManager.getSheetData("abilità"), ['codice', 'titolo', 'tipo', 'fonte'], {'alias_disciplina': datiMerge[i]['alias_disciplina'] ,'$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }]})
+      .inserisciTabella('PERMANENTE', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'apprendimento permanente', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('CITTADINANZA', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'cittadinanza', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('INDIRIZZO', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'indirizzo', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
+      .inserisciTabella('DISCIPLINARI', dataManager.getSheetData("competenze"), ['codice', 'nome', ], { 'tipo': 'disciplinari', '$or': [{ 'nome_periodo': 'tutti' }, { 'nome_periodo': datiMerge[i]['periodo'] }] })
       .creaTabelleDeiModuli(moduliFiltrati, datiUd)
       .finalizza(); // Salva e chiude
 
