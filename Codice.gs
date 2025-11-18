@@ -42,7 +42,7 @@ function main() {
     // Itera su ogni riga del foglio "programmazioni".
     datiProgrammazioni.forEach((contestoCorrente, index) => {
       Logger.log(`--- Avvio elaborazione per riga ${index + 1} ---`);
-
+      
       const nomeNuovoFile = `${contestoCorrente['anno_scolastico']} ${contestoCorrente['classe']} ${contestoCorrente['corso']} ${contestoCorrente['alias_disciplina']}`;
 
       const idTemplate = datiTemplates['id_template'];
@@ -522,13 +522,13 @@ class MasterDetailLogic extends BaseTableLogic {
     }
 
     const { templates, position } = this._findAndRemoveTemplateTables(templateTags);
-
+    
     let insertionIndex = position;
 
     sortedModules.forEach(modulo => {
       // 1. Popola e inserisci la tabella MODULO (la prima della lista)
       this._insertModuloTable(templates[templateTags[0]], modulo, insertionIndex++);
-
+      
       // 2. Filtra, popola e inserisci la tabella Unità Didattiche (la seconda)
       const udFiltrate = this.udData
         .filter(ud => String(ud.titolo_modulo).trim() === String(modulo.titolo).trim())
