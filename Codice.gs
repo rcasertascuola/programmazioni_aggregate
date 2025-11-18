@@ -106,7 +106,7 @@ class DocumentBuilder {
     this.doc.saveAndClose();
     Logger.log("Documento salvato e chiuso.");
   }
-
+  
   /**
    * Restituisce l'URL del documento generato.
    * @returns {string}
@@ -152,13 +152,13 @@ class DocumentBuilder {
   _processTables(settings, dataManager, context) {
     const tableFactory = new TableFactory();
     const tables = this.body.getTables();
-
+    
     tables.forEach(table => {
       if (table.getNumRows() === 0 || table.getRow(0).getNumCells() === 0) return;
-
+      
       const templateName = table.getRow(0).getCell(0).getText().trim();
       const config = settings.find(s => s.NomeTabellaTemplate === templateName);
-
+      
       if (config) {
         Logger.log(`Trovata corrispondenza per la tabella template: "${templateName}"`);
         try {
@@ -213,7 +213,7 @@ class DataManager {
     const headers = data.shift().map(h => String(h).trim().toLowerCase());
     const hasChiave = headers.includes('chiave');
     const hasValore = headers.includes('valore');
-
+    
     let result;
 
     if (hasChiave && hasValore) {
@@ -271,7 +271,7 @@ class SettingsManager {
     const configData = this.dataManager.getSheetData('Settings');
     this.settings = configData.filter(row => String(row['Attivo']).trim().toUpperCase() === 'SI');
     Logger.log(`Caricate ${this.settings.length} configurazioni attive dal foglio "Settings".`);
-
+    
     return this.settings;
   }
 }
@@ -341,7 +341,7 @@ class BaseTableLogic {
  * @extends BaseTableLogic
  */
 class SimpleTableLogic extends BaseTableLogic {
-
+  
   /**
    * Esegue il popolamento della tabella.
    * @param {GoogleAppsScript.Document.Table} table La tabella fisica nel documento.
@@ -349,11 +349,11 @@ class SimpleTableLogic extends BaseTableLogic {
   execute(table) {
     const filteredData = this._filterData(this.data);
     const sortedData = this._sortData(filteredData);
-
+    
     if (sortedData.length === 0) {
       Logger.log(`Nessun dato per la tabella "${this.config.NomeTabellaTemplate}" dopo i filtri. La tabella verrà lasciata vuota o rimossa se necessario.`);
       // Opcionale: rimuovere la tabella se vuota
-      // table.removeFromParent();
+      // table.removeFromParent(); 
       return;
     }
 
@@ -379,7 +379,7 @@ class SimpleTableLogic extends BaseTableLogic {
     table.removeRow(table.getNumRows() - sortedData.length - 1);
     Logger.log(`Popolate ${sortedData.length} righe nella tabella "${this.config.NomeTabellaTemplate}".`);
   }
-
+  
   /**
    * Formatta una cella preservando lo stile del template.
    * @param {GoogleAppsScript.Document.TableCell} cell La cella da formattare.
@@ -398,7 +398,7 @@ class SimpleTableLogic extends BaseTableLogic {
               }
           }
       }
-
+      
       paragraph.clear();
       const newTextElement = paragraph.appendText(text);
 
@@ -418,7 +418,7 @@ class SimpleTableLogic extends BaseTableLogic {
     if (!this.config.Filtri) return data;
     
     const filters = this.config.Filtri.split(';').map(f => f.trim());
-
+    
     return data.filter(row => {
       return filters.every(filter => {
         // Logica OR
@@ -454,7 +454,7 @@ class SimpleTableLogic extends BaseTableLogic {
 
     const rowValue = String(row[key] || '').trim().toLowerCase();
     const filterValue = String(value).trim().toLowerCase();
-
+    
     return rowValue === filterValue;
   }
 
@@ -550,7 +550,7 @@ class MasterDetailLogic extends BaseTableLogic {
     const templates = {};
     let position = -1;
     const allTables = this.docBody.getTables();
-
+    
     tags.forEach(tag => {
       const foundTable = allTables.find(t => t.getNumRows() > 0 && t.getRow(0).getCell(0).getText().trim() === tag);
       if (foundTable) {
@@ -572,7 +572,7 @@ class MasterDetailLogic extends BaseTableLogic {
     Logger.log(`Trovate e rimosse le tabelle template per LogicaModuli. Posizione di inserimento: ${position}`);
     return { templates, position };
   }
-
+  
   _insertModuloTable(templateTable, moduloData, index) {
     const newTable = templateTable.copy();
     // Esempio di popolamento - adattare alle proprie esigenze
@@ -591,11 +591,11 @@ class MasterDetailLogic extends BaseTableLogic {
       newRow.getCell(0).setText(ud.titolo || '');
       newRow.getCell(1).setText(ud.conoscenze || '');
     });
-
+    
     newTable.removeRow(newTable.getNumRows() - udData.length - 1);
     this.docBody.insertTable(index, newTable);
   }
-
+  
   _insertAbilitaTable(templateTable, moduloData, index) {
     const newTable = templateTable.copy();
     const templateRow = newTable.getRow(newTable.getNumRows() - 1);
@@ -615,7 +615,7 @@ class MasterDetailLogic extends BaseTableLogic {
 
     const competenze = `${moduloData.competenze_specifiche || ''} (${moduloData.competenze || ''})`.trim();
     newRow.getCell(1).setText(competenze);
-
+    
     newTable.removeRow(newTable.getNumRows() - 2);
     this.docBody.insertTable(index, newTable);
   }
